@@ -48,8 +48,9 @@
 ```
 creator-world-tools/
   astro.config.mjs          site: 'https://tools.creator-world.net'、@astrojs/sitemap
+  scripts/
+    postbuild.mjs           ビルド後に dist/_headers（CSP 等）と dist/ads.txt を環境変数から生成
   public/
-    _headers                CSP などのセキュリティヘッダー（Cloudflare Pages 用）
     robots.txt
     favicon.svg
   src/
@@ -79,7 +80,6 @@ creator-world-tools/
       privacy.astro         プライバシーポリシー
       about.astro           サイトについて
       404.astro
-      ads.txt.ts            PUBLIC_ADSENSE_CLIENT から ads.txt を生成（未設定時は空）
   tests/
     e2e/smoke.spec.ts
   .github/workflows/
@@ -158,8 +158,10 @@ README に上記手順と、既存ツールをコピーして始めるテンプ�
 - localStorage に保存するのは**設定値と最近使ったツールのみ**。入力データ・出力データは保存しない。
   - キーは `cwt:` で始め、ツール固有の設定は `cwt:tool:<slug>:<key>` とする。
   - `storage.ts` はストレージが使えない環境（プライベートモード等）での例外を握りつぶし、既定値で動作する。
-- `public/_headers` で次を設定する:
-  - `Content-Security-Policy`: `default-src 'self'`、`connect-src` は `'self'` と AdSense・Cloudflare Web Analytics に必要なドメインのみ、`frame-src` は AdSense に必要なドメインのみ、`object-src 'none'`、`base-uri 'self'`。AdSense が要求するドメインは実装時に公式ドキュメントで確認し、ヘッダーの近くにコメントで出典を残す。
+- `scripts/postbuild.mjs` が `dist/_headers` を生成し、次を設定する:
+  - `Content-Security-Policy`（広告・解析なし）: `default-src 'self'`、`script-src 'self'`、`connect-src 'self'`、`frame-src 'none'`、`object-src 'none'`、`base-uri 'self'`、`frame-ancestors 'none'`。inline script は禁止（Astro のスクリプトのインライン化も無効にする）。
+  - Cloudflare Web Analytics を有効にした場合は `static.cloudflareinsights.com`（script）と `cloudflareinsights.com`（connect）だけを追加する。
+  - AdSense を有効にした場合は、国別ドメインを含む多数の Google ドメインから配信されドメインの列挙が保守できないため、`script-src` / `connect-src` / `img-src` / `frame-src` に `https:` を許可する。この場合も入力データを送らないことは、通信 API の静的チェック（`src` 配下で `fetch` 等の使用をテストで禁止）と、広告なしビルドでの E2E（外部通信ゼロ）で担保する。
   - `X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、`Permissions-Policy`（カメラ・マイク・位置情報を無効化）。
 - E2E テストで、各ツールの変換操作中にサイト自身のオリジン以外へのリクエストが発生しないことを検証する（広告・解析は E2E 実行時は無効）。
 
@@ -207,18 +209,20 @@ Shift_JIS のエンコード（バイト数計算）はブラウザ標準で行�
 ## 10. テスト
 
 - **単体テスト（Vitest）**: 各 `logic.ts` の正常系・境界値・エラー系。`encoding.ts` の Shift_JIS バイト数、`registry.ts` の検証ロジック。
-- **E2E（Playwright）**: `astro build` の成果物を `astro preview` で配信し、以下を検証する。
+- **E2E（Playwright）**: 広告・解析の環境変数なしでビルドした成果物を `wrangler pages dev`（`_headers` を適用するローカルサーバー、ログイン不要）で配信し、以下を検証する。
   - トップページにすべてのツールのカードが表示される。
   - 各ツールページが表示され、代表的な入力で期待する出力になる。
   - 変換操作中にサイト自身のオリジン以外へのリクエストが発生しない。
-  - `/privacy`、`/about`、`/sitemap-index.xml`、`/robots.txt` が 200 を返す。
+  - `/privacy`、`/about`、`/sitemap-index.xml`、`/robots.txt`、`/ads.txt` が 200 を返す。
+  - CSP ヘッダーが付与され、各ページで CSP 違反・JS エラーが発生しない。
+  - 入力データが localStorage に保存されない。
 - **型チェック**: `astro check`。
 
 ## 11. CI/CD
 
 ### `.github/workflows/ci.yml`
 
-- トリガー: `pull_request`、および `master` 以外のブランチへの `push`。
+- トリガー: `pull_request`、および `deploy.yml` からの `workflow_call`（検証ジョブを共通化）。
 - 手順: `actions/checkout` → `actions/setup-node`（`.nvmrc` の LTS、npm キャッシュ）→ `npm ci` → `npm run check`（astro check）→ `npm test`（Vitest）→ `npm run build` → Playwright ブラウザのインストール → `npm run test:e2e`。
 - PR の場合は検証合格後に `wrangler pages deploy dist --project-name=creator-world-tools --branch=<head branch>` でプレビューにデプロイする。ただしフォークからの PR では Secrets を使えないため、プレビューのデプロイは省略する。
 
