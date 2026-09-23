@@ -1,0 +1,96 @@
+---
+import IOPanel from '../../components/IOPanel.astro';
+---
+
+<IOPanel id="base64" inputLabel="テキストを入力" placeholder="エンコードしたいテキスト">
+  <fieldset slot="options" class="options">
+    <legend>オプション</legend>
+    <label class="field">
+      モード
+      <select data-opt="mode">
+        <option value="encode">エンコード（→ Base64）</option>
+        <option value="decode">デコード（Base64 →）</option>
+      </select>
+    </label>
+    <label class="field" data-encode-only>
+      <input type="checkbox" data-opt="urlSafe" /> URL セーフ形式（- と _ を使い、= を省く）
+    </label>
+  </fieldset>
+</IOPanel>
+
+<script>
+  import { decodeBytes } from '../../lib/encoding';
+  import { formatBytes } from '../../lib/file';
+  import { bindIOPanel } from '../../lib/io-panel';
+  import { describeError } from '../../lib/result';
+  import { readBool, readChoice, toolKey, write } from '../../lib/storage';
+  import { base64ToBytes, bytesToBase64, bytesToText, guessFileType, MODES, textToBase64, type Mode } from './logic';
+
+  const SLUG = 'base64';
+  const root = document.querySelector<HTMLElement>(`[data-io="${SLUG}"]`)!;
+  const mode = root.querySelector<HTMLSelectElement>('[data-opt="mode"]')!;
+  const urlSafe = root.querySelector<HTMLInputElement>('[data-opt="urlSafe"]')!;
+  const inputLabel = root.querySelector<HTMLElement>(`label[for="${SLUG}-input"] strong`)!;
+
+  mode.value = readChoice(toolKey(SLUG, 'mode'), MODES, 'encode');
+  urlSafe.checked = readBool(toolKey(SLUG, 'urlSafe'), false);
+
+  function applyMode() {
+    const encode = (mode.value as Mode) === 'encode';
+    inputLabel.textContent = encode ? 'テキストを入力（ファイルも可）' : 'Base64 を入力';
+    root.querySelectorAll<HTMLElement>('[data-encode-only]').forEach((el) => (el.hidden = !encode));
+  }
+  applyMode();
+
+  const panel = bindIOPanel(root, {
+    run(text) {
+      if ((mode.value as Mode) === 'encode') {
+        const out = textToBase64(text, urlSafe.checked);
+        panel.setOutput(out, { filename: 'encoded.txt', mime: 'text/plain', data: [out] });
+        return;
+      }
+      const r = base64ToBytes(text);
+      if (!r.ok) {
+        panel.setError(describeError(r.error));
+        return;
+      }
+      const decoded = bytesToText(r.value);
+      if (decoded !== null) {
+        panel.setOutput(decoded, { filename: 'decoded.txt', mime: 'text/plain;charset=utf-8', data: [decoded] });
+        return;
+      }
+      const type = guessFileType(r.value);
+      panel.setOutput(
+        `（バイナリデータ ${formatBytes(r.value.length)}・推定形式 ${type.ext}。「ダウンロード」で保存してください）`,
+        { filename: `decoded.${type.ext}`, mime: type.mime, data: [r.value] },
+        { copyable: false },
+      );
+    },
+    readFile(file, bytes) {
+      if ((mode.value as Mode) === 'decode') {
+        const d = decodeBytes(bytes, 'auto');
+        if (!d.ok) {
+          panel.setError(d.error.message);
+          return null;
+        }
+        return d.value.text;
+      }
+      // エンコードではファイルの中身をそのまま（バイナリとして）変換する
+      panel.input.value = '';
+      const out = bytesToBase64(bytes, urlSafe.checked);
+      panel.setOutput(out, { filename: `${file.name}.b64.txt`, mime: 'text/plain', data: [out] });
+      panel.setInfo(`${file.name}（${formatBytes(bytes.length)}）をエンコードしました`);
+      return null;
+    },
+  });
+
+  mode.addEventListener('change', () => {
+    write(toolKey(SLUG, 'mode'), mode.value);
+    applyMode();
+    panel.rerun();
+  });
+  urlSafe.addEventListener('change', () => {
+    write(toolKey(SLUG, 'urlSafe'), urlSafe.checked);
+    panel.rerun();
+  });
+</script>
