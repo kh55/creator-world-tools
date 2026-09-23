@@ -1,0 +1,55 @@
+---
+import IOPanel from '../../components/IOPanel.astro';
+
+const items = [
+  ['chars', '文字数（改行を除く）'],
+  ['charsNoSpace', '空白・改行を除いた文字数'],
+  ['lines', '行数'],
+  ['utf8Bytes', 'バイト数（UTF-8）'],
+  ['sjisBytes', 'バイト数（Shift_JIS）'],
+  ['manuscriptPages', '400 字詰め原稿用紙'],
+] as const;
+---
+
+<IOPanel id="char-count" inputLabel="テキストを入力" placeholder="ここに文章を貼り付けてください" runLabel="数える" showOutput={false}>
+  <div slot="after">
+    <dl class="stats" data-stats>
+      {
+        items.map(([key, label]) => (
+          <div>
+            <dt>{label}</dt>
+            <dd data-stat={key}>0</dd>
+          </div>
+        ))
+      }
+    </dl>
+    <p class="msg-info" data-note></p>
+  </div>
+</IOPanel>
+
+<script>
+  import { bindIOPanel } from '../../lib/io-panel';
+  import { countChars, type CharStats } from './logic';
+
+  const root = document.querySelector<HTMLElement>('[data-io="char-count"]')!;
+  const note = root.querySelector<HTMLElement>('[data-note]')!;
+  const stat = (key: keyof CharStats) => root.querySelector<HTMLElement>(`[data-stat="${key}"]`)!;
+  const fmt = (n: number) => n.toLocaleString('ja-JP');
+
+  bindIOPanel(root, {
+    runOnEmpty: true,
+    run(text) {
+      const s = countChars(text);
+      stat('chars').textContent = fmt(s.chars);
+      stat('charsNoSpace').textContent = fmt(s.charsNoSpace);
+      stat('lines').textContent = fmt(s.lines);
+      stat('utf8Bytes').textContent = fmt(s.utf8Bytes);
+      stat('sjisBytes').textContent = fmt(s.sjisBytes);
+      stat('manuscriptPages').textContent = `${fmt(s.manuscriptPages)} 枚（${fmt(s.manuscriptLines)} 行）`;
+      note.textContent =
+        s.sjisUnencodable > 0
+          ? `Shift_JIS で表せない文字（絵文字など）が ${fmt(s.sjisUnencodable)} 文字あり、Shift_JIS のバイト数には含めていません`
+          : '';
+    },
+  });
+</script>
