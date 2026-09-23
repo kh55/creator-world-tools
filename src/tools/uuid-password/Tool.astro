@@ -1,0 +1,150 @@
+<div class="io" data-gen="uuid-password">
+  <section>
+    <h2>UUID</h2>
+    <fieldset class="options">
+      <legend>オプション</legend>
+      <label class="field">
+        バージョン
+        <select data-opt="uuidVersion">
+          <option value="v4">v4（ランダム）</option>
+          <option value="v7">v7（時刻順に並ぶ）</option>
+        </select>
+      </label>
+      <label class="field">個数 <input type="number" data-opt="uuidCount" min="1" max="100" /></label>
+      <label class="field"><input type="checkbox" data-opt="uuidUpper" /> 大文字</label>
+      <button type="button" class="btn btn-primary" data-uuid-generate>生成</button>
+    </fieldset>
+    <textarea data-uuid-output readonly spellcheck="false" aria-label="生成した UUID"></textarea>
+    <div class="io-actions"><button type="button" class="btn" data-uuid-copy>コピー</button></div>
+    <p class="msg" data-uuid-msg role="status" aria-live="polite"></p>
+  </section>
+
+  <section>
+    <h2>パスワード</h2>
+    <fieldset class="options">
+      <legend>オプション</legend>
+      <label class="field">長さ <input type="number" data-opt="pwLength" min="4" max="128" /></label>
+      <label class="field">個数 <input type="number" data-opt="pwCount" min="1" max="20" /></label>
+      <label class="field"><input type="checkbox" data-opt="upper" /> 英大文字</label>
+      <label class="field"><input type="checkbox" data-opt="lower" /> 英小文字</label>
+      <label class="field"><input type="checkbox" data-opt="digits" /> 数字</label>
+      <label class="field"><input type="checkbox" data-opt="symbols" /> 記号</label>
+      <label class="field"><input type="checkbox" data-opt="excludeAmbiguous" /> 紛らわしい文字（I l 1 O 0 o |）を除く</label>
+      <button type="button" class="btn btn-primary" data-pw-generate>生成</button>
+    </fieldset>
+    <textarea data-pw-output readonly spellcheck="false" aria-label="生成したパスワード"></textarea>
+    <div class="io-actions"><button type="button" class="btn" data-pw-copy>コピー</button></div>
+    <p class="msg" data-pw-msg role="status" aria-live="polite"></p>
+  </section>
+</div>
+
+<script>
+  import { copyText } from '../../lib/file';
+  import { describeError } from '../../lib/result';
+  import { readBool, readChoice, readInt, toolKey, write } from '../../lib/storage';
+  import {
+    COUNT_MIN,
+    generatePasswords,
+    generateUuids,
+    PASSWORD_COUNT_MAX,
+    PASSWORD_MAX,
+    PASSWORD_MIN,
+    UUID_COUNT_MAX,
+    UUID_VERSIONS,
+    type UuidVersion,
+  } from './logic';
+
+  const SLUG = 'uuid-password';
+  const root = document.querySelector<HTMLElement>(`[data-gen="${SLUG}"]`)!;
+  const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+  const opt = <T extends HTMLElement>(name: string) => $<T>(`[data-opt="${name}"]`);
+  const key = (name: string) => toolKey(SLUG, name);
+
+  const uuidVersion = opt<HTMLSelectElement>('uuidVersion');
+  const uuidCount = opt<HTMLInputElement>('uuidCount');
+  const uuidUpper = opt<HTMLInputElement>('uuidUpper');
+  const pwLength = opt<HTMLInputElement>('pwLength');
+  const pwCount = opt<HTMLInputElement>('pwCount');
+  const flags = ['upper', 'lower', 'digits', 'symbols', 'excludeAmbiguous'] as const;
+  const flagEls = Object.fromEntries(flags.map((f) => [f, opt<HTMLInputElement>(f)])) as Record<
+    (typeof flags)[number],
+    HTMLInputElement
+  >;
+  const flagDefaults = { upper: true, lower: true, digits: true, symbols: false, excludeAmbiguous: false };
+
+  uuidVersion.value = readChoice(key('uuidVersion'), UUID_VERSIONS, 'v4');
+  uuidCount.value = String(readInt(key('uuidCount'), 5, COUNT_MIN, UUID_COUNT_MAX));
+  uuidUpper.checked = readBool(key('uuidUpper'), false);
+  pwLength.value = String(readInt(key('pwLength'), 16, PASSWORD_MIN, PASSWORD_MAX));
+  pwCount.value = String(readInt(key('pwCount'), 5, COUNT_MIN, PASSWORD_COUNT_MAX));
+  for (const f of flags) flagEls[f].checked = readBool(key(f), flagDefaults[f]);
+
+  function show(output: HTMLTextAreaElement, msg: HTMLElement, lines: string[] | null, error?: string) {
+    output.value = lines ? lines.join('\n') : '';
+    msg.textContent = error ?? '';
+    msg.className = error ? 'msg msg-error' : 'msg';
+  }
+
+  // 生成した値は保存しない（設定だけを保存する）
+  function generateUuid() {
+    const r = generateUuids(uuidVersion.value as UuidVersion, Number(uuidCount.value));
+    const out = $<HTMLTextAreaElement>('[data-uuid-output]');
+    const msg = $<HTMLElement>('[data-uuid-msg]');
+    if (!r.ok) return show(out, msg, null, describeError(r.error));
+    show(out, msg, uuidUpper.checked ? r.value.map((u) => u.toUpperCase()) : r.value);
+  }
+
+  function generatePw() {
+    const r = generatePasswords(
+      {
+        length: Number(pwLength.value),
+        upper: flagEls.upper.checked,
+        lower: flagEls.lower.checked,
+        digits: flagEls.digits.checked,
+        symbols: flagEls.symbols.checked,
+        excludeAmbiguous: flagEls.excludeAmbiguous.checked,
+      },
+      Number(pwCount.value),
+    );
+    const out = $<HTMLTextAreaElement>('[data-pw-output]');
+    const msg = $<HTMLElement>('[data-pw-msg]');
+    if (!r.ok) return show(out, msg, null, describeError(r.error));
+    show(out, msg, r.value);
+  }
+
+  function persistOn(el: HTMLInputElement | HTMLSelectElement, name: string, regenerate: () => void) {
+    el.addEventListener('change', () => {
+      const value =
+        el instanceof HTMLInputElement && el.type === 'checkbox'
+          ? el.checked
+          : el instanceof HTMLInputElement && el.type === 'number'
+            ? Number(el.value)
+            : el.value;
+      write(key(name), value);
+      regenerate();
+    });
+  }
+  persistOn(uuidVersion, 'uuidVersion', generateUuid);
+  persistOn(uuidCount, 'uuidCount', generateUuid);
+  persistOn(uuidUpper, 'uuidUpper', generateUuid);
+  persistOn(pwLength, 'pwLength', generatePw);
+  persistOn(pwCount, 'pwCount', generatePw);
+  for (const f of flags) persistOn(flagEls[f], f, generatePw);
+
+  $('[data-uuid-generate]').addEventListener('click', generateUuid);
+  $('[data-pw-generate]').addEventListener('click', generatePw);
+
+  async function copyFrom(outputSel: string, msgSel: string) {
+    const out = $<HTMLTextAreaElement>(outputSel);
+    const msg = $<HTMLElement>(msgSel);
+    const result = await copyText(out.value, out);
+    msg.className = 'msg msg-info';
+    msg.textContent =
+      result === 'copied' ? 'コピーしました' : '選択しました。Ctrl+C（Mac は ⌘C）でコピーしてください';
+  }
+  $('[data-uuid-copy]').addEventListener('click', () => copyFrom('[data-uuid-output]', '[data-uuid-msg]'));
+  $('[data-pw-copy]').addEventListener('click', () => copyFrom('[data-pw-output]', '[data-pw-msg]'));
+
+  generateUuid();
+  generatePw();
+</script>
