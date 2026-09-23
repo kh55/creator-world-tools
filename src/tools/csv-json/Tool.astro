@@ -1,0 +1,173 @@
+---
+import IOPanel from '../../components/IOPanel.astro';
+---
+
+<IOPanel
+  id="csv-json"
+  inputLabel="CSV を入力"
+  placeholder={'name,age\n太郎,20'}
+  accept=".csv,.tsv,.txt,.json,text/csv,application/json,text/plain"
+>
+  <fieldset slot="options" class="options">
+    <legend>オプション</legend>
+    <label class="field">
+      変換の向き
+      <select data-opt="direction">
+        <option value="csv-to-json">CSV → JSON</option>
+        <option value="json-to-csv">JSON → CSV</option>
+      </select>
+    </label>
+    <label class="field">
+      区切り文字
+      <select data-opt="delimiter">
+        <option value="comma">カンマ（,）</option>
+        <option value="tab">タブ</option>
+        <option value="semicolon">セミコロン（;）</option>
+      </select>
+    </label>
+    <label class="field" data-csv-only>
+      <input type="checkbox" data-opt="header" /> 1 行目をヘッダーとして扱う
+    </label>
+    <label class="field" data-csv-only>
+      ファイルの文字コード
+      <select data-opt="encoding">
+        <option value="auto">自動判定</option>
+        <option value="utf-8">UTF-8</option>
+        <option value="shift_jis">Shift_JIS</option>
+      </select>
+    </label>
+    <label class="field" data-json-only>
+      <input type="checkbox" data-opt="bom" /> BOM を付ける（Excel で文字化けを防ぐ）
+    </label>
+    <span class="msg-info" data-detected></span>
+  </fieldset>
+  <div slot="after" data-preview hidden>
+    <p class="msg-info" data-preview-caption></p>
+    <div class="table-wrap"><table data-preview-table></table></div>
+  </div>
+</IOPanel>
+
+<script>
+  import { decodeBytes, INPUT_ENCODINGS, type InputEncoding } from '../../lib/encoding';
+  import { bindIOPanel } from '../../lib/io-panel';
+  import { describeError } from '../../lib/result';
+  import { readBool, readChoice, toolKey, write } from '../../lib/storage';
+  import {
+    csvToJson,
+    DELIMITER_KEYS,
+    delimiterOf,
+    DIRECTIONS,
+    jsonToCsv,
+    type DelimiterKey,
+    type Direction,
+    type Table,
+  } from './logic';
+
+  const SLUG = 'csv-json';
+  const root = document.querySelector<HTMLElement>(`[data-io="${SLUG}"]`)!;
+  const opt = <T extends HTMLElement>(name: string) => root.querySelector<T>(`[data-opt="${name}"]`)!;
+  const direction = opt<HTMLSelectElement>('direction');
+  const delimiter = opt<HTMLSelectElement>('delimiter');
+  const header = opt<HTMLInputElement>('header');
+  const encoding = opt<HTMLSelectElement>('encoding');
+  const bom = opt<HTMLInputElement>('bom');
+  const detected = root.querySelector<HTMLElement>('[data-detected]')!;
+  const inputLabel = root.querySelector<HTMLLabelElement>(`label[for="${SLUG}-input"] strong`)!;
+  const preview = root.querySelector<HTMLElement>('[data-preview]')!;
+  const previewCaption = root.querySelector<HTMLElement>('[data-preview-caption]')!;
+  const previewTable = root.querySelector<HTMLTableElement>('[data-preview-table]')!;
+
+  direction.value = readChoice(toolKey(SLUG, 'direction'), DIRECTIONS, 'csv-to-json');
+  delimiter.value = readChoice(toolKey(SLUG, 'delimiter'), DELIMITER_KEYS, 'comma');
+  header.checked = readBool(toolKey(SLUG, 'header'), true);
+  encoding.value = readChoice(toolKey(SLUG, 'encoding'), INPUT_ENCODINGS, 'auto');
+  bom.checked = readBool(toolKey(SLUG, 'bom'), true);
+
+  function renderPreview(table: Table | null) {
+    previewTable.replaceChildren();
+    preview.hidden = !table;
+    if (!table) return;
+    const thead = previewTable.createTHead().insertRow();
+    for (const c of table.columns) {
+      const th = document.createElement('th');
+      th.textContent = c;
+      thead.append(th);
+    }
+    const tbody = previewTable.createTBody();
+    for (const r of table.rows) {
+      const tr = tbody.insertRow();
+      for (let i = 0; i < table.columns.length; i++) tr.insertCell().textContent = r[i] ?? '';
+    }
+    previewCaption.textContent =
+      table.totalRows > table.rows.length
+        ? `プレビュー（全 ${table.totalRows} 行中、先頭 ${table.rows.length} 行）`
+        : `プレビュー（全 ${table.totalRows} 行）`;
+  }
+
+  function applyDirection() {
+    const toJson = direction.value === 'csv-to-json';
+    inputLabel.textContent = toJson ? 'CSV を入力' : 'JSON を入力';
+    root.querySelectorAll<HTMLElement>('[data-csv-only]').forEach((el) => (el.hidden = !toJson));
+    root.querySelectorAll<HTMLElement>('[data-json-only]').forEach((el) => (el.hidden = toJson));
+  }
+  applyDirection();
+
+  const panel = bindIOPanel(root, {
+    runOnEmpty: true,
+    run(text) {
+      if (text.trim() === '') {
+        renderPreview(null);
+        panel.setOutput('');
+        return;
+      }
+      const d = delimiterOf(delimiter.value as DelimiterKey);
+      if ((direction.value as Direction) === 'csv-to-json') {
+        const r = csvToJson(text, { delimiter: d, header: header.checked });
+        if (!r.ok) {
+          renderPreview(null);
+          panel.setError(describeError(r.error));
+          return;
+        }
+        panel.setOutput(r.value.json, { filename: 'data.json', mime: 'application/json', data: [r.value.json] });
+        renderPreview(r.value.table);
+      } else {
+        const r = jsonToCsv(text, { delimiter: d });
+        if (!r.ok) {
+          renderPreview(null);
+          panel.setError(describeError(r.error));
+          return;
+        }
+        const ext = d === '\t' ? 'tsv' : 'csv';
+        panel.setOutput(r.value.csv, {
+          filename: `data.${ext}`,
+          mime: 'text/csv;charset=utf-8',
+          data: bom.checked ? ['﻿', r.value.csv] : [r.value.csv],
+        });
+        renderPreview(r.value.table);
+      }
+    },
+    readFile(_file, bytes) {
+      const enc = direction.value === 'csv-to-json' ? (encoding.value as InputEncoding) : 'auto';
+      const decoded = decodeBytes(bytes, enc);
+      if (!decoded.ok) {
+        detected.textContent = '';
+        panel.setError(decoded.error.message);
+        return null;
+      }
+      detected.textContent = `読み込んだ文字コード: ${decoded.value.encoding === 'utf-8' ? 'UTF-8' : 'Shift_JIS'}`;
+      return decoded.value.text;
+    },
+  });
+
+  const persist = (el: HTMLSelectElement | HTMLInputElement, name: string) =>
+    el.addEventListener('change', () => {
+      write(toolKey(SLUG, name), el instanceof HTMLInputElement && el.type === 'checkbox' ? el.checked : el.value);
+      if (el === direction) applyDirection();
+      panel.rerun();
+    });
+  persist(direction, 'direction');
+  persist(delimiter, 'delimiter');
+  persist(header, 'header');
+  persist(encoding, 'encoding');
+  persist(bom, 'bom');
+</script>
