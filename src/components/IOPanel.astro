@@ -1,0 +1,63 @@
+---
+interface Props {
+  id: string;
+  inputLabel: string;
+  placeholder?: string;
+  accept?: string;
+  runLabel?: string;
+  showOutput?: boolean;
+}
+
+const {
+  id,
+  inputLabel,
+  placeholder = '',
+  accept = '',
+  runLabel = '変換',
+  showOutput = true,
+} = Astro.props;
+---
+
+<div class="io" data-io={id}>
+  <section>
+    <label for={`${id}-input`}><strong>{inputLabel}</strong></label>
+    <div class="io-drop" data-drop>
+      <textarea
+        id={`${id}-input`}
+        data-input
+        spellcheck="false"
+        autocomplete="off"
+        placeholder={placeholder}></textarea>
+    </div>
+    <div class="io-actions">
+      <label class="btn">
+        ファイルを選択
+        <input type="file" data-file accept={accept || undefined} class="visually-hidden" />
+      </label>
+      <button type="button" class="btn" data-clear>クリア</button>
+      <button type="button" class="btn btn-primary" data-run>{runLabel}</button>
+      <span class="msg-info">ファイルをここにドラッグ&ドロップすることもできます</span>
+    </div>
+  </section>
+  <slot name="options" />
+  <p class="msg" data-msg role="status" aria-live="polite"></p>
+  {
+    showOutput && (
+      <section>
+        <label for={`${id}-output`}>
+          <strong>出力</strong>
+        </label>
+        <textarea id={`${id}-output`} data-output readonly spellcheck="false"></textarea>
+        <div class="io-actions">
+          <button type="button" class="btn" data-copy disabled>
+            コピー
+          </button>
+          <button type="button" class="btn" data-download disabled>
+            ダウンロード
+          </button>
+        </div>
+      </section>
+    )
+  }
+  <slot name="after" />
+</div>

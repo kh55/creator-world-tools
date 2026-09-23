@@ -1,0 +1,87 @@
+---
+import IOPanel from '../../components/IOPanel.astro';
+---
+
+<IOPanel
+  id="json-format"
+  inputLabel="JSON を入力"
+  placeholder='{"name": "value", "list": [1, 2, 3]}'
+  accept=".json,application/json,text/plain"
+  runLabel="整形"
+>
+  <fieldset slot="options" class="options">
+    <legend>オプション</legend>
+    <label class="field">
+      モード
+      <select data-opt="mode">
+        <option value="format">整形</option>
+        <option value="minify">圧縮</option>
+      </select>
+    </label>
+    <label class="field">
+      インデント
+      <select data-opt="indent">
+        <option value="2">スペース 2</option>
+        <option value="4">スペース 4</option>
+        <option value="tab">タブ</option>
+      </select>
+    </label>
+    <label class="field"><input type="checkbox" data-opt="sortKeys" /> キーを並べ替える</label>
+  </fieldset>
+</IOPanel>
+
+<script>
+  import { bindIOPanel } from '../../lib/io-panel';
+  import { describeError } from '../../lib/result';
+  import { readBool, readChoice, toolKey, write } from '../../lib/storage';
+  import { formatJson, INDENTS, MODES, type Indent, type Mode } from './logic';
+
+  const SLUG = 'json-format';
+  const root = document.querySelector<HTMLElement>(`[data-io="${SLUG}"]`)!;
+  const mode = root.querySelector<HTMLSelectElement>('[data-opt="mode"]')!;
+  const indent = root.querySelector<HTMLSelectElement>('[data-opt="indent"]')!;
+  const sortKeys = root.querySelector<HTMLInputElement>('[data-opt="sortKeys"]')!;
+
+  mode.value = readChoice(toolKey(SLUG, 'mode'), MODES, 'format');
+  indent.value = readChoice(toolKey(SLUG, 'indent'), INDENTS, '2');
+  sortKeys.checked = readBool(toolKey(SLUG, 'sortKeys'), false);
+  indent.disabled = mode.value === 'minify';
+
+  const panel = bindIOPanel(root, {
+    run(text) {
+      const r = formatJson(text, {
+        mode: mode.value as Mode,
+        indent: indent.value as Indent,
+        sortKeys: sortKeys.checked,
+      });
+      if (!r.ok) {
+        panel.setError(describeError(r.error));
+        return;
+      }
+      panel.setOutput(r.value.text, {
+        filename: mode.value === 'minify' ? 'minified.json' : 'formatted.json',
+        mime: 'application/json',
+        data: [r.value.text],
+      });
+      if (r.value.precisionWarning) {
+        panel.setInfo('お使いのブラウザでは 16 桁以上の数値の精度が失われる場合があります');
+      } else {
+        panel.setInfo('✓ 正しい JSON です');
+      }
+    },
+  });
+
+  mode.addEventListener('change', () => {
+    write(toolKey(SLUG, 'mode'), mode.value);
+    indent.disabled = mode.value === 'minify';
+    panel.rerun();
+  });
+  indent.addEventListener('change', () => {
+    write(toolKey(SLUG, 'indent'), indent.value);
+    panel.rerun();
+  });
+  sortKeys.addEventListener('change', () => {
+    write(toolKey(SLUG, 'sortKeys'), sortKeys.checked);
+    panel.rerun();
+  });
+</script>
