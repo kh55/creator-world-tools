@@ -1,9 +1,83 @@
-<html lang="ja">
-  <head>
-    <meta charset="utf-8" />
-    <title>Creator World Tools</title>
-  </head>
-  <body>
-    <h1>Creator World Tools</h1>
-  </body>
-</html>
+---
+import ToolCard from '../components/ToolCard.astro';
+import BaseLayout from '../layouts/BaseLayout.astro';
+import { tools } from '../lib/registry';
+import { groupByCategory } from '../lib/registry-core';
+import { SITE } from '../lib/site';
+
+const groups = groupByCategory(tools);
+---
+
+<BaseLayout
+  title={SITE.name}
+  description="CSV・JSON 変換や文字数カウントなど、ブラウザだけで使える無料ツール集。データはサーバーに送信されず、ログインも不要です。"
+>
+  <section class="hero">
+    <h1>{SITE.name}</h1>
+    <p>{SITE.tagline}</p>
+    <p class="privacy-note">
+      🔒 入力・アップロードしたデータはブラウザ内だけで処理され、サーバーへ送信・保存されません。
+    </p>
+  </section>
+
+  <div class="search">
+    <label for="tool-search" class="visually-hidden">ツールを検索</label>
+    <input
+      id="tool-search"
+      type="search"
+      placeholder="ツールを検索（例: CSV、文字数）"
+      autocomplete="off"
+      hidden
+    />
+  </div>
+
+  <section id="recent" hidden>
+    <h2>最近使ったツール</h2>
+    <ul class="tool-grid" data-recent-list></ul>
+  </section>
+
+  {
+    groups.map((g) => (
+      <section id={`cat-${g.category}`} data-category>
+        <h2>{g.label}</h2>
+        <ul class="tool-grid">
+          {g.tools.map((t) => (
+            <ToolCard tool={t} />
+          ))}
+        </ul>
+      </section>
+    ))
+  }
+  <p id="no-results" hidden>該当するツールが見つかりませんでした。</p>
+  {tools.length === 0 && <p>ツールは準備中です。</p>}
+</BaseLayout>
+
+<script>
+  import { matchesQuery } from '../lib/search';
+  import { getRecent } from '../lib/storage';
+
+  const input = document.querySelector<HTMLInputElement>('#tool-search')!;
+  const recent = document.querySelector<HTMLElement>('#recent')!;
+  const recentList = document.querySelector<HTMLElement>('[data-recent-list]')!;
+  const noResults = document.querySelector<HTMLElement>('#no-results')!;
+  const sections = [...document.querySelectorAll<HTMLElement>('section[data-category]')];
+  const cards = sections.flatMap((s) => [...s.querySelectorAll<HTMLElement>('.tool-card')]);
+
+  input.hidden = false;
+
+  const bySlug = new Map(cards.map((c) => [c.dataset.slug, c]));
+  for (const slug of getRecent()) {
+    const card = bySlug.get(slug);
+    if (card) recentList.append(card.cloneNode(true));
+  }
+  const hasRecent = recentList.children.length > 0;
+  recent.hidden = !hasRecent;
+
+  input.addEventListener('input', () => {
+    const q = input.value;
+    for (const c of cards) c.hidden = !matchesQuery(c.dataset.search ?? '', q);
+    for (const s of sections) s.hidden = !s.querySelector('.tool-card:not([hidden])');
+    noResults.hidden = cards.length === 0 || cards.some((c) => !c.hidden);
+    recent.hidden = !hasRecent || q.trim() !== '';
+  });
+</script>

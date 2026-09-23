@@ -1,0 +1,28 @@
+---
+import type { AstroInstance, MarkdownInstance } from 'astro';
+import ToolLayout from '../../layouts/ToolLayout.astro';
+import { tools } from '../../lib/registry';
+import type { ToolMeta } from '../../lib/tool-meta';
+
+export function getStaticPaths() {
+  return tools.map((tool) => ({ params: { slug: tool.slug }, props: { tool } }));
+}
+
+interface Props {
+  tool: ToolMeta;
+}
+
+const { tool } = Astro.props;
+const components = import.meta.glob<AstroInstance>('../../tools/*/Tool.astro', { eager: true });
+const guides = import.meta.glob<MarkdownInstance<Record<string, never>>>('../../tools/*/guide.md', {
+  eager: true,
+});
+const Tool = components[`../../tools/${tool.slug}/Tool.astro`].default;
+const Guide = guides[`../../tools/${tool.slug}/guide.md`].Content;
+const related = tools.filter((t) => t.category === tool.category && t.slug !== tool.slug);
+---
+
+<ToolLayout tool={tool} related={related}>
+  <Tool slot="tool" />
+  <Guide slot="guide" />
+</ToolLayout>

@@ -1,0 +1,58 @@
+---
+import AdSlot from '../components/AdSlot.astro';
+import PrivacyBadge from '../components/PrivacyBadge.astro';
+import { env } from '../lib/site';
+import { CATEGORY_LABELS, type ToolMeta } from '../lib/tool-meta';
+import BaseLayout from './BaseLayout.astro';
+
+interface Props {
+  tool: ToolMeta;
+  related: ToolMeta[];
+}
+
+const { tool, related } = Astro.props;
+---
+
+<BaseLayout title={tool.title} description={tool.description}>
+  <nav class="breadcrumb" aria-label="パンくずリスト">
+    <ol>
+      <li><a href="/">トップ</a></li>
+      <li><a href={`/#cat-${tool.category}`}>{CATEGORY_LABELS[tool.category]}</a></li>
+      <li aria-current="page">{tool.title}</li>
+    </ol>
+  </nav>
+  <h1>{tool.icon} {tool.title}</h1>
+  <p class="lead">{tool.description}</p>
+  <PrivacyBadge />
+  <section class="tool" data-tool={tool.slug}>
+    <slot name="tool" />
+  </section>
+  <AdSlot adSlot={env.slotTool} />
+  <article class="guide">
+    <slot name="guide" />
+  </article>
+  <AdSlot adSlot={env.slotFooter} />
+  {
+    related.length > 0 && (
+      <section class="related">
+        <h2>同じカテゴリのツール</h2>
+        <ul>
+          {related.map((t) => (
+            <li>
+              <a href={`/tools/${t.slug}/`}>
+                {t.icon} {t.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </section>
+    )
+  }
+</BaseLayout>
+
+<script>
+  import { pushRecent } from '../lib/storage';
+
+  const slug = document.querySelector<HTMLElement>('[data-tool]')?.dataset.tool;
+  if (slug) pushRecent(slug);
+</script>
