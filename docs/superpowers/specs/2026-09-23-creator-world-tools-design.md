@@ -78,7 +78,6 @@ creator-world-tools/
       tools/[slug].astro    getStaticPaths で registry から全ツールのページを生成
       privacy.astro         プライバシーポリシー
       about.astro           サイトについて
-      contact.astro         お問い合わせ（連絡先はメールアドレスの表記）
       404.astro
       ads.txt.ts            PUBLIC_ADSENSE_CLIENT から ads.txt を生成（未設定時は空）
   tests/
@@ -151,7 +150,6 @@ README に上記手順と、既存ツールをコピーして始めるテンプ�
 
 - `/privacy`: ブラウザ内処理であり入力データは送信・保存しないこと／localStorage に保存する項目の一覧（設定値・最近使ったツール）／Google AdSense による Cookie 利用と第三者配信、広告設定ページへのリンク／Cloudflare Web Analytics の利用（Cookie なし）／ポリシーの改定について。
 - `/about`: サイトの目的、運営者、データを送信しない方針。
-- `/contact`: 連絡先メールアドレス（環境変数 `PUBLIC_CONTACT_EMAIL` から表示）。
 
 ## 6. データの扱い（セキュリティ・プライバシー）
 
@@ -213,7 +211,7 @@ Shift_JIS のエンコード（バイト数計算）はブラウザ標準で行�
   - トップページにすべてのツールのカードが表示される。
   - 各ツールページが表示され、代表的な入力で期待する出力になる。
   - 変換操作中にサイト自身のオリジン以外へのリクエストが発生しない。
-  - `/privacy`、`/about`、`/contact`、`/sitemap-index.xml`、`/robots.txt` が 200 を返す。
+  - `/privacy`、`/about`、`/sitemap-index.xml`、`/robots.txt` が 200 を返す。
 - **型チェック**: `astro check`。
 
 ## 11. CI/CD
@@ -233,7 +231,7 @@ Shift_JIS のエンコード（バイト数計算）はブラウザ標準で行�
 ### Secrets / 環境変数
 
 - GitHub Secrets: `CLOUDFLARE_API_TOKEN`（権限は「Cloudflare Pages: 編集」のみ）、`CLOUDFLARE_ACCOUNT_ID`。
-- GitHub Variables（ビルド時に使用）: `PUBLIC_ADSENSE_CLIENT`、`PUBLIC_ADSENSE_SLOT_TOOL`、`PUBLIC_ADSENSE_SLOT_FOOTER`、`PUBLIC_CF_ANALYTICS_TOKEN`、`PUBLIC_CONTACT_EMAIL`。いずれも未設定でもビルドは成功する。
+- GitHub Variables（ビルド時に使用）: `PUBLIC_ADSENSE_CLIENT`、`PUBLIC_ADSENSE_SLOT_TOOL`、`PUBLIC_ADSENSE_SLOT_FOOTER`、`PUBLIC_CF_ANALYTICS_TOKEN`。いずれも未設定でもビルドは成功する。
 
 ### ブランチ保護
 
@@ -268,3 +266,4 @@ Shift_JIS のエンコード（バイト数計算）はブラウザ標準で行�
 - ダークモード以外のテーマ切り替え（ダークモードは `prefers-color-scheme` に従う）
 - GA4 などの Cookie を使うアクセス解析
 - PWA / オフライン対応
+- お問い合わせページ（連絡先の掲載は行わない）
