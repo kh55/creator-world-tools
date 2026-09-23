@@ -7,10 +7,11 @@
   },
   "scripts": {
     "dev": "astro dev",
-    "build": "astro build",
+    "build": "astro build && node scripts/postbuild.mjs",
     "check": "astro check",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "preview": "wrangler pages dev dist --port 8788"
   },
   "dependencies": {
     "@astrojs/sitemap": "^3.7.4",
