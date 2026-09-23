@@ -1,0 +1,92 @@
+---
+import IOPanel from '../../components/IOPanel.astro';
+---
+
+<IOPanel id="url-encode" inputLabel="テキストを入力" placeholder="https://example.com/?q=検索語">
+  <fieldset slot="options" class="options">
+    <legend>オプション</legend>
+    <label class="field">
+      モード
+      <select data-opt="mode">
+        <option value="encode">エンコード</option>
+        <option value="decode">デコード</option>
+      </select>
+    </label>
+    <label class="field" data-decode-only>
+      <input type="checkbox" data-opt="plusAsSpace" /> + を空白として扱う（フォーム送信の形式）
+    </label>
+  </fieldset>
+  <div slot="after" data-query hidden>
+    <p><strong>クエリパラメータ</strong></p>
+    <div class="table-wrap"><table data-query-table></table></div>
+  </div>
+</IOPanel>
+
+<script>
+  import { bindIOPanel } from '../../lib/io-panel';
+  import { describeError } from '../../lib/result';
+  import { readBool, readChoice, toolKey, write } from '../../lib/storage';
+  import { decodeComponent, encodeComponent, MODES, parseQuery, type Mode } from './logic';
+
+  const SLUG = 'url-encode';
+  const root = document.querySelector<HTMLElement>(`[data-io="${SLUG}"]`)!;
+  const mode = root.querySelector<HTMLSelectElement>('[data-opt="mode"]')!;
+  const plusAsSpace = root.querySelector<HTMLInputElement>('[data-opt="plusAsSpace"]')!;
+  const query = root.querySelector<HTMLElement>('[data-query]')!;
+  const queryTable = root.querySelector<HTMLTableElement>('[data-query-table]')!;
+
+  mode.value = readChoice(toolKey(SLUG, 'mode'), MODES, 'encode');
+  plusAsSpace.checked = readBool(toolKey(SLUG, 'plusAsSpace'), false);
+
+  function applyMode() {
+    const decode = (mode.value as Mode) === 'decode';
+    root.querySelectorAll<HTMLElement>('[data-decode-only]').forEach((el) => (el.hidden = !decode));
+  }
+  applyMode();
+
+  function renderQuery(text: string) {
+    const params = parseQuery(text);
+    queryTable.replaceChildren();
+    query.hidden = !params;
+    if (!params) return;
+    const head = queryTable.createTHead().insertRow();
+    for (const label of ['キー', '値']) {
+      const th = document.createElement('th');
+      th.textContent = label;
+      head.append(th);
+    }
+    const body = queryTable.createTBody();
+    for (const p of params) {
+      const tr = body.insertRow();
+      tr.insertCell().textContent = p.key;
+      tr.insertCell().textContent = p.value;
+    }
+  }
+
+  const panel = bindIOPanel(root, {
+    runOnEmpty: true,
+    run(text) {
+      renderQuery(text);
+      if (text === '') {
+        panel.setOutput('');
+        return;
+      }
+      const r = (mode.value as Mode) === 'encode' ? encodeComponent(text) : decodeComponent(text, plusAsSpace.checked);
+      if (!r.ok) {
+        panel.setError(describeError(r.error));
+        return;
+      }
+      panel.setOutput(r.value, { filename: 'result.txt', mime: 'text/plain;charset=utf-8', data: [r.value] });
+    },
+  });
+
+  mode.addEventListener('change', () => {
+    write(toolKey(SLUG, 'mode'), mode.value);
+    applyMode();
+    panel.rerun();
+  });
+  plusAsSpace.addEventListener('change', () => {
+    write(toolKey(SLUG, 'plusAsSpace'), plusAsSpace.checked);
+    panel.rerun();
+  });
+</script>
