@@ -43,7 +43,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      - run: npx wrangler pages deploy dist --project-name=creator-world-tools --branch="${{ github.head_ref }}"
+      # ブランチ名は式展開せず環境変数で渡す（シェルへのインジェクション対策）
+      - run: npx wrangler pages deploy dist --project-name=creator-world-tools --branch="$HEAD_REF"
         env:
+          HEAD_REF: ${{ github.head_ref }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

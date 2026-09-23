@@ -26,6 +26,11 @@ function tableOf(columns: string[], rows: string[][]): Table {
   return { columns, rows: rows.slice(0, PREVIEW_ROWS), totalRows: rows.length };
 }
 
+// 行数が多いと Math.max(...rows) は引数が多すぎてスタックあふれになるため reduce で求める
+function maxWidth(rows: unknown[][]): number {
+  return rows.reduce((max, r) => Math.max(max, r.length), 0);
+}
+
 function numberedColumns(width: number): string[] {
   return Array.from({ length: width }, (_, i) => `列${i + 1}`);
 }
@@ -56,13 +61,14 @@ export function csvToJson(
   const text = csv.replace(/^﻿/, '');
   if (text.trim() === '') return err('入力が空です');
   // ヘッダーの扱い（空・重複・列数不一致）を自前で制御するため、常に配列として読む
-  const parsed = Papa.parse<string[]>(text, { delimiter: opts.delimiter, skipEmptyLines: 'greedy' });
+  // 完全な空行だけを飛ばす（',' だけの行はすべて空のセルの行として残す）
+  const parsed = Papa.parse<string[]>(text, { delimiter: opts.delimiter, skipEmptyLines: true });
   const quoteError = parsed.errors.find((e) => e.type === 'Quotes');
   if (quoteError) {
     return err(`${(quoteError.row ?? 0) + 1} 行目付近で引用符（"）が閉じられていません`);
   }
   const rows = parsed.data;
-  const width = Math.max(0, ...rows.map((r) => r.length));
+  const width = maxWidth(rows);
 
   if (!opts.header) {
     return ok({ json: JSON.stringify(rows, null, 2), table: tableOf(numberedColumns(width), rows) });
@@ -92,7 +98,7 @@ export function jsonToCsv(
   const unparse = { delimiter: opts.delimiter, newline: '\r\n' };
   if (items.every(Array.isArray)) {
     const data = (items as unknown[][]).map((r) => r.map(cellText));
-    const width = Math.max(...data.map((r) => r.length));
+    const width = maxWidth(data);
     return ok({ csv: Papa.unparse(data, unparse), table: tableOf(numberedColumns(width), data) });
   }
   if (items.every(isPlainObject)) {

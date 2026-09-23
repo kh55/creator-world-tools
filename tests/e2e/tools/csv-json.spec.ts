@@ -38,6 +38,15 @@ test.describe('CSV ⇔ JSON 変換', () => {
     expect(Buffer.concat(body)).toEqual(Buffer.from('\uFEFFa,b\r\n1,"x,y"'));
   });
 
+  test('13 万行の CSV ファイルも変換できる', async ({ page }, testInfo) => {
+    const file = testInfo.outputPath('large.csv');
+    writeFileSync(file, ['n', ...Array.from({ length: 130_000 }, (_, i) => String(i))].join('\n'));
+    await page.goto('/tools/csv-json/');
+    await page.locator('[data-file]').setInputFiles(file);
+    await expect(page.locator('[data-preview-caption]')).toHaveText('プレビュー（全 130000 行中、先頭 100 行）');
+    await expect(page.locator('[data-msg]')).not.toHaveClass(/msg-error/);
+  });
+
   test('50MB を超えるファイルは読み込まない', async ({ page }, testInfo) => {
     const big = testInfo.outputPath('big.csv');
     writeFileSync(big, Buffer.alloc(50 * 1024 * 1024 + 1, 0x61));

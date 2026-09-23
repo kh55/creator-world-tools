@@ -71,13 +71,23 @@ export function bindIOPanel(root: HTMLElement, options: IOPanelOptions): IOPanel
     },
   };
 
+  // 想定外の例外でも古い出力を残さず、エラーとして表示する
+  function fail(e: unknown) {
+    console.error(e);
+    panel.setError('処理中にエラーが発生しました。入力を小さくして試してください');
+  }
+
   function runNow() {
     clearTimeout(timer);
     if (input.value.trim() === '' && !options.runOnEmpty) {
       panel.setOutput('');
       return;
     }
-    options.run(input.value);
+    try {
+      options.run(input.value);
+    } catch (e) {
+      fail(e);
+    }
   }
 
   function scheduleRun() {
@@ -96,17 +106,22 @@ export function bindIOPanel(root: HTMLElement, options: IOPanelOptions): IOPanel
       panel.setError(size.error.message);
       return;
     }
-    const bytes = await readFileBytes(file);
     let text: string | null;
-    if (options.readFile) {
-      text = await options.readFile(file, bytes);
-    } else {
-      const decoded = decodeBytes(bytes, 'auto');
-      if (!decoded.ok) {
-        panel.setError(decoded.error.message);
-        return;
+    try {
+      const bytes = await readFileBytes(file);
+      if (options.readFile) {
+        text = await options.readFile(file, bytes);
+      } else {
+        const decoded = decodeBytes(bytes, 'auto');
+        if (!decoded.ok) {
+          panel.setError(decoded.error.message);
+          return;
+        }
+        text = decoded.value.text;
       }
-      text = decoded.value.text;
+    } catch (e) {
+      fail(e);
+      return;
     }
     if (text === null) return;
     input.value = text;

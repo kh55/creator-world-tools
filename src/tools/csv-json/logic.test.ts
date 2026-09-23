@@ -59,6 +59,19 @@ describe('csvToJson', () => {
     expect(table.totalRows).toBe(150);
   });
 
+  it('区切り文字だけの行（すべて空のセル）も行として残す', () => {
+    expect(JSON.parse(c2j('a,b\n,\n1,2\n').json)).toEqual([
+      { a: '', b: '' },
+      { a: '1', b: '2' },
+    ]);
+  });
+
+  it('13 万行を超える CSV でも例外を投げずに変換できる', () => {
+    const csv = ['n', ...Array.from({ length: 130_000 }, (_, i) => String(i))].join('\n');
+    const r = csvToJson(csv, { delimiter: ',', header: true });
+    expect(r.ok && r.value.table.totalRows).toBe(130_000);
+  });
+
   it('閉じていない引用符はエラー', () => {
     const r = csvToJson('a,b\n"x,1', { delimiter: ',', header: true });
     expect(r.ok).toBe(false);
@@ -91,6 +104,12 @@ describe('jsonToCsv', () => {
 
   it('大きな整数を変えない', () => {
     expect(j2c('[{"id":12345678901234567890}]').csv).toBe('id\r\n12345678901234567890');
+  });
+
+  it('13 万行を超える配列でも例外を投げずに変換できる', () => {
+    const json = JSON.stringify(Array.from({ length: 130_000 }, (_, i) => [i]));
+    const r = jsonToCsv(json, { delimiter: ',' });
+    expect(r.ok && r.value.table.totalRows).toBe(130_000);
   });
 
   it('区切り文字を指定できる', () => {
