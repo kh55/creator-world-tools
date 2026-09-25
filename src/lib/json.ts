@@ -39,8 +39,18 @@ export function parseJson(text: string): Result<ParsedJson> {
     return ok({ value: JSON.parse(text) as unknown, precisionWarning: BIG_NUMBER.test(text) });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
-    return err(`JSON の構文エラー: ${message}`, locate(text, message));
+    const pos = locate(text, message);
+    // 位置は「N 行 M 列」として別に表示するので、メッセージからは削る
+    return err(`JSON の構文エラー: ${pos.line === undefined ? message : cleanMessage(message)}`, pos);
   }
+}
+
+export function cleanMessage(message: string): string {
+  return message
+    .replace(/\s*\(line \d+ column \d+\)/, '')
+    .replace(/\s+at line \d+ column \d+ of the JSON data/, '')
+    .replace(/\s+at position \d+/, '')
+    .trim();
 }
 
 // ブラウザごとに異なるエラーメッセージから位置を取り出す

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRawNumber, locate, parseJson, supportsRawJSON } from './json';
+import { cleanMessage, isRawNumber, locate, parseJson, supportsRawJSON } from './json';
 
 describe('parseJson', () => {
   it('Node 22 では JSON.rawJSON が使える（テスト前提の確認）', () => {
@@ -34,6 +34,23 @@ describe('parseJson', () => {
     expect(r.error.message).toContain('JSON の構文エラー');
     expect(r.error.line).toBe(3);
     expect(r.error.column).toBe(1);
+  });
+});
+
+describe('エラーメッセージ', () => {
+  it('位置を取り出せたら、メッセージから位置の記述を削る（V8）', () => {
+    const r = parseJson('{"a":1,}');
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error.line).toBe(1);
+    expect(r.error.message).not.toMatch(/position \d+|line \d+ column \d+/);
+  });
+
+  it('Firefox や古い V8 の形式からも位置の記述を削る', () => {
+    expect(cleanMessage('JSON.parse: expected property name at line 1 column 8 of the JSON data')).toBe(
+      'JSON.parse: expected property name',
+    );
+    expect(cleanMessage('Unexpected token } in JSON at position 7')).toBe('Unexpected token } in JSON');
   });
 });
 
