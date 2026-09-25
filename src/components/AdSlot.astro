@@ -24,9 +24,8 @@ const enabled = Boolean(env.adsenseClient && adSlot);
 }
 
 <script>
+  import { pushAdSlots } from '../lib/ads';
+
   // スクリプトはページ内で 1 度だけ実行されるので、まだ push していない広告枠をまとめて処理する
-  document.querySelectorAll('ins.adsbygoogle:not([data-cwt-pushed])').forEach((el) => {
-    el.setAttribute('data-cwt-pushed', '');
-    (window.adsbygoogle = window.adsbygoogle ?? []).push({});
-  });
+  pushAdSlots(document.querySelectorAll('ins.adsbygoogle:not([data-cwt-pushed])'), window);
 </script>
