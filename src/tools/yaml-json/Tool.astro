@@ -1,0 +1,77 @@
+---
+import IOPanel from '../../components/IOPanel.astro';
+---
+
+<IOPanel
+  id="yaml-json"
+  inputLabel="YAML を入力"
+  placeholder={'name: app\nports:\n  - 80\n  - 443'}
+  accept=".yaml,.yml,.json,application/json,text/plain"
+>
+  <fieldset slot="options" class="options">
+    <legend>オプション</legend>
+    <label class="field">
+      変換の向き
+      <select data-opt="direction">
+        <option value="yaml-to-json">YAML → JSON</option>
+        <option value="json-to-yaml">JSON → YAML</option>
+      </select>
+    </label>
+    <label class="field">
+      インデント
+      <select data-opt="indent">
+        <option value="2">スペース 2</option>
+        <option value="4">スペース 4</option>
+      </select>
+    </label>
+  </fieldset>
+</IOPanel>
+
+<script>
+  import { bindIOPanel } from '../../lib/io-panel';
+  import { describeError } from '../../lib/result';
+  import { readChoice, toolKey, write } from '../../lib/storage';
+  import { DIRECTIONS, INDENTS, jsonToYaml, yamlToJson, type Direction } from './logic';
+
+  const SLUG = 'yaml-json';
+  const root = document.querySelector<HTMLElement>(`[data-io="${SLUG}"]`)!;
+  const direction = root.querySelector<HTMLSelectElement>('[data-opt="direction"]')!;
+  const indent = root.querySelector<HTMLSelectElement>('[data-opt="indent"]')!;
+  const inputLabel = root.querySelector<HTMLElement>(`label[for="${SLUG}-input"] strong`)!;
+
+  direction.value = readChoice(toolKey(SLUG, 'direction'), DIRECTIONS, 'yaml-to-json');
+  indent.value = readChoice(toolKey(SLUG, 'indent'), INDENTS, '2');
+
+  function applyDirection() {
+    inputLabel.textContent = direction.value === 'yaml-to-json' ? 'YAML を入力' : 'JSON を入力';
+  }
+  applyDirection();
+
+  const panel = bindIOPanel(root, {
+    run(text) {
+      const toJson = (direction.value as Direction) === 'yaml-to-json';
+      const opts = { indent: indent.value === '4' ? 4 : 2 } as const;
+      const r = toJson ? yamlToJson(text, opts) : jsonToYaml(text, opts);
+      if (!r.ok) {
+        panel.setError(describeError(r.error));
+        return;
+      }
+      panel.setOutput(
+        r.value,
+        toJson
+          ? { filename: 'data.json', mime: 'application/json', data: [r.value] }
+          : { filename: 'data.yaml', mime: 'application/yaml', data: [r.value] },
+      );
+    },
+  });
+
+  direction.addEventListener('change', () => {
+    write(toolKey(SLUG, 'direction'), direction.value);
+    applyDirection();
+    panel.rerun();
+  });
+  indent.addEventListener('change', () => {
+    write(toolKey(SLUG, 'indent'), indent.value);
+    panel.rerun();
+  });
+</script>

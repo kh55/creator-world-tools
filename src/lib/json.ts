@@ -15,6 +15,11 @@ export function isRawNumber(v: unknown): v is { rawJSON: string } {
   return supportsRawJSON && api.isRawJSON!(v);
 }
 
+/** 数値の元の表記をそのまま JSON に出すための値。JSON.rawJSON が使えなければ null */
+export function toRawJSON(source: string): unknown | null {
+  return supportsRawJSON ? api.rawJSON!(source) : null;
+}
+
 export interface ParsedJson {
   value: unknown;
   precisionWarning: boolean;
