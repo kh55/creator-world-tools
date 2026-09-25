@@ -25,7 +25,14 @@ export interface ParsedJson {
   precisionWarning: boolean;
 }
 
-const BIG_NUMBER = /(?<![\w.])-?\d{16,}/;
+const JSON_STRING = /"(?:[^"\\]|\\.)*"/g;
+const JSON_NUMBER = /-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g;
+
+/** 文字列を除いた数値のうち、JSON.parse で読むと表記が変わるもの（1.0、1e3、16 桁以上の整数など）があるか */
+export function mayChangeNumbers(text: string): boolean {
+  const bare = text.replace(JSON_STRING, '""');
+  return (bare.match(JSON_NUMBER) ?? []).some((t) => String(Number(t)) !== t);
+}
 
 export function parseJson(text: string): Result<ParsedJson> {
   if (text.trim() === '') return err('入力が空です');
@@ -36,7 +43,7 @@ export function parseJson(text: string): Result<ParsedJson> {
       );
       return ok({ value, precisionWarning: false });
     }
-    return ok({ value: JSON.parse(text) as unknown, precisionWarning: BIG_NUMBER.test(text) });
+    return ok({ value: JSON.parse(text) as unknown, precisionWarning: mayChangeNumbers(text) });
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const pos = locate(text, message);
