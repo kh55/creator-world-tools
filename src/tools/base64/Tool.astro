@@ -77,20 +77,38 @@ import IOPanel from '../../components/IOPanel.astro';
       }
       // エンコードではファイルの中身をそのまま（バイナリとして）変換する
       panel.input.value = '';
-      const out = bytesToBase64(bytes, urlSafe.checked);
-      panel.setOutput(out, { filename: `${file.name}.b64.txt`, mime: 'text/plain', data: [out] });
-      panel.setInfo(`${file.name}（${formatBytes(bytes.length)}）をエンコードしました`);
+      lastFile = { name: file.name, bytes };
+      encodeFile(lastFile);
       return null;
     },
   });
 
+  // 直前にエンコードしたファイル（メモリ上だけに持ち、保存はしない）。設定を変えたときに変換し直すのに使う
+  let lastFile: { name: string; bytes: Uint8Array } | null = null;
+
+  function encodeFile(f: { name: string; bytes: Uint8Array }) {
+    const out = bytesToBase64(f.bytes, urlSafe.checked);
+    panel.setOutput(out, { filename: `${f.name}.b64.txt`, mime: 'text/plain', data: [out] });
+    panel.setInfo(`${f.name}（${formatBytes(f.bytes.length)}）をエンコードしました`);
+  }
+
+  // 入力欄に文字を入れたら、テキストの変換に戻る
+  panel.input.addEventListener('input', () => {
+    lastFile = null;
+  });
+  root.querySelector('[data-clear]')!.addEventListener('click', () => {
+    lastFile = null;
+  });
+
   mode.addEventListener('change', () => {
     write(toolKey(SLUG, 'mode'), mode.value);
+    lastFile = null;
     applyMode();
     panel.rerun();
   });
   urlSafe.addEventListener('change', () => {
     write(toolKey(SLUG, 'urlSafe'), urlSafe.checked);
-    panel.rerun();
+    if (lastFile) encodeFile(lastFile);
+    else panel.rerun();
   });
 </script>

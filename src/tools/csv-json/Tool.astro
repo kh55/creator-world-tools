@@ -172,6 +172,9 @@ import IOPanel from '../../components/IOPanel.astro';
   panel.input.addEventListener('input', () => {
     lastFile = null;
   });
+  root.querySelector('[data-clear]')!.addEventListener('click', () => {
+    lastFile = null;
+  });
 
   const persist = (el: HTMLSelectElement | HTMLInputElement, name: string) =>
     el.addEventListener('change', () => {
