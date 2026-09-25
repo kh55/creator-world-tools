@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import Gtm from '../components/Gtm.astro';
 import { env, SITE } from '../lib/site';
 
 interface Props {
@@ -42,6 +43,7 @@ const beacon = JSON.stringify({ token: env.cfAnalyticsToken });
     }
   </head>
   <body>
+    {env.gtmId && <Gtm id={env.gtmId} />}
     <header class="site-header">
       <div class="container">
         <a class="brand" href="/">{SITE.name}</a>

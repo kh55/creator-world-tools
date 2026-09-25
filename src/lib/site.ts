@@ -10,4 +10,5 @@ export const env = {
   slotTool: import.meta.env.PUBLIC_ADSENSE_SLOT_TOOL ?? '',
   slotFooter: import.meta.env.PUBLIC_ADSENSE_SLOT_FOOTER ?? '',
   cfAnalyticsToken: import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN ?? '',
+  gtmId: import.meta.env.PUBLIC_GTM_ID ?? '',
 };

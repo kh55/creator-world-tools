@@ -17,10 +17,10 @@ export function buildCsp(env) {
     script.push(CF_ANALYTICS_SCRIPT);
     connect.push(CF_ANALYTICS_BEACON);
   }
-  if (env.PUBLIC_ADSENSE_CLIENT) {
-    // AdSense は国別ドメインを含む多数の Google ドメインから配信されるため、ドメインを列挙する CSP は
-    // 保守できない。広告を有効にしたときは https を広く許可し、入力データを送らないことは
-    // コード側（no-network.test.ts）と E2E（広告なしビルドで外部通信ゼロ）で担保する。
+  if (env.PUBLIC_ADSENSE_CLIENT || env.PUBLIC_GTM_ID) {
+    // AdSense や GTM（GA4 など）は国別ドメインを含む多数の Google ドメインから配信されるため、
+    // ドメインを列挙する CSP は保守できない。これらを有効にしたときは https を広く許可し、
+    // 入力データを送らないことはコード側（no-network.test.ts）と E2E（外部タグなしビルドで外部通信ゼロ）で担保する。
     script.push("'unsafe-inline'", 'https:');
     connect.push('https:');
     img.push('https:');
