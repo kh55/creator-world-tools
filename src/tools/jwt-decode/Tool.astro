@@ -1,0 +1,100 @@
+---
+import IOPanel from '../../components/IOPanel.astro';
+---
+
+<IOPanel id="jwt-decode" inputLabel="JWT を入力" placeholder="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...." runLabel="デコード" showOutput={false}>
+  <div slot="after" data-result hidden>
+    <p class="msg" data-status role="status" aria-live="polite"></p>
+    <div class="table-wrap" data-times-wrap hidden>
+      <table>
+        <thead><tr><th>クレーム</th><th>日時（このブラウザのタイムゾーン）</th><th>現在から</th></tr></thead>
+        <tbody data-times></tbody>
+      </table>
+    </div>
+    <section>
+      <h3>ヘッダー <button type="button" class="btn" data-copy="header">コピー</button></h3>
+      <pre class="jwt-json" data-json="header"></pre>
+    </section>
+    <section>
+      <h3>ペイロード <button type="button" class="btn" data-copy="payload">コピー</button></h3>
+      <pre class="jwt-json" data-json="payload"></pre>
+    </section>
+    <p class="msg-info">⚠ 署名は検証していません。表示された内容が改ざんされていないことは保証されません。</p>
+  </div>
+</IOPanel>
+
+<style>
+  .jwt-json {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+</style>
+
+<script>
+  import { copyText } from '../../lib/file';
+  import { bindIOPanel } from '../../lib/io-panel';
+  import { describeError } from '../../lib/result';
+  import { formatInZone, relativeTime } from '../unix-time/logic';
+  import { decodeJwt, tokenStatus, type TimeClaim } from './logic';
+
+  const root = document.querySelector<HTMLElement>('[data-io="jwt-decode"]')!;
+  const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+  const result = $('[data-result]');
+  const status = $('[data-status]');
+  const timesBody = $<HTMLTableSectionElement>('[data-times]');
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const CLAIM_LABELS: Record<TimeClaim, string> = { iat: 'iat（発行日時）', nbf: 'nbf（有効開始）', exp: 'exp（有効期限）' };
+  const STATUS_TEXT = {
+    valid: ['✓ 有効期限内です', 'msg msg-info'],
+    expired: ['✗ 有効期限が切れています', 'msg msg-error'],
+    'not-yet-valid': ['✗ まだ有効期間が始まっていません（nbf）', 'msg msg-error'],
+    'no-expiry': ['有効期限（exp）は設定されていません', 'msg msg-info'],
+  } as const;
+
+  const panel = bindIOPanel(root, {
+    runOnEmpty: true,
+    run(text) {
+      panel.clearMessages();
+      if (text.trim() === '') {
+        result.hidden = true;
+        return;
+      }
+      const r = decodeJwt(text);
+      if (!r.ok) {
+        result.hidden = true;
+        panel.setError(describeError(r.error));
+        return;
+      }
+      const d = r.value;
+      result.hidden = false;
+      $('[data-json="header"]').textContent = d.headerJson;
+      $('[data-json="payload"]').textContent = d.payloadJson;
+      const now = Date.now();
+      const [label, cls] = STATUS_TEXT[tokenStatus(d.times, now)];
+      status.textContent = d.algorithm ? `${label}（署名アルゴリズム: ${d.algorithm}）` : label;
+      status.className = cls;
+      timesBody.replaceChildren();
+      for (const t of d.times) {
+        const tr = timesBody.insertRow();
+        tr.insertCell().textContent = CLAIM_LABELS[t.name];
+        tr.insertCell().textContent = formatInZone(t.ms, tz);
+        tr.insertCell().textContent = relativeTime(t.ms, now);
+      }
+      $('[data-times-wrap]').hidden = d.times.length === 0;
+    },
+  });
+
+  root.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const r = await copyText($(`[data-json="${btn.dataset.copy}"]`).textContent ?? '');
+      panel.setInfo(r === 'copied' ? 'コピーしました' : 'コピーできませんでした。テキストを選択してコピーしてください');
+    }),
+  );
+</script>
