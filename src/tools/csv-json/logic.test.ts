@@ -51,6 +51,16 @@ describe('csvToJson', () => {
     expect(JSON.parse(c2j('name,,name\n1,2,3').json)).toEqual([{ name: '1', 列2: '2', name_2: '3' }]);
   });
 
+  it('数字の見出しも CSV の列の順番どおりに出力する', () => {
+    expect(c2j('name,2024,2025\n太郎,1,2').json).toBe(
+      '[\n  {\n    "name": "太郎",\n    "2024": "1",\n    "2025": "2"\n  }\n]',
+    );
+  });
+
+  it('ヘッダー行だけならデータは空の配列', () => {
+    expect(c2j('a,b').json).toBe('[]');
+  });
+
   it('プレビュー用の表は先頭 100 行まで', () => {
     const csv = ['n', ...Array.from({ length: 150 }, (_, i) => String(i))].join('\n');
     const { table } = c2j(csv);
