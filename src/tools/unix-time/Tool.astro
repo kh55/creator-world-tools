@@ -1,0 +1,154 @@
+<div class="io" data-unix>
+  <fieldset class="options">
+    <legend>タイムゾーン</legend>
+    <label class="field">
+      表示・入力に使うタイムゾーン
+      <select data-opt="timeZone"></select>
+    </label>
+    <button type="button" class="btn" data-now>現在時刻を入れる</button>
+  </fieldset>
+
+  <section>
+    <h2>タイムスタンプ → 日時</h2>
+    <label class="field">
+      UNIX タイムスタンプ
+      <input type="text" data-ts-input inputmode="numeric" spellcheck="false" autocomplete="off" placeholder="1700000000" size="24" />
+    </label>
+    <p class="msg" data-ts-msg role="status" aria-live="polite"></p>
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          <tr><th scope="row">判定した単位</th><td data-out="unit"></td></tr>
+          <tr><th scope="row">選択したタイムゾーン</th><td data-out="zoned"></td></tr>
+          <tr><th scope="row">UTC</th><td data-out="utc"></td></tr>
+          <tr><th scope="row">ISO 8601</th><td data-out="iso"></td></tr>
+          <tr><th scope="row">現在から</th><td data-out="relative"></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>日時 → タイムスタンプ</h2>
+    <label class="field">
+      日時
+      <input type="text" data-dt-input spellcheck="false" autocomplete="off" placeholder="2026-09-25 12:34:56" size="28" />
+    </label>
+    <p class="msg" data-dt-msg role="status" aria-live="polite"></p>
+    <div class="table-wrap">
+      <table>
+        <tbody>
+          <tr>
+            <th scope="row">秒</th><td data-out="seconds"></td>
+            <td><button type="button" class="btn" data-copy="seconds" disabled>コピー</button></td>
+          </tr>
+          <tr>
+            <th scope="row">ミリ秒</th><td data-out="millis"></td>
+            <td><button type="button" class="btn" data-copy="millis" disabled>コピー</button></td>
+          </tr>
+          <tr><th scope="row">UTC</th><td data-out="dtUtc"></td><td></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+  import { copyText } from '../../lib/file';
+  import { describeError } from '../../lib/result';
+  import { readRaw, toolKey, write } from '../../lib/storage';
+  import { formatInZone, isTimeZone, parseDateTime, parseTimestamp, relativeTime, UNIT_LABELS } from './logic';
+
+  const SLUG = 'unix-time';
+  const root = document.querySelector<HTMLElement>('[data-unix]')!;
+  const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+  const tzSelect = $<HTMLSelectElement>('[data-opt="timeZone"]');
+  const tsInput = $<HTMLInputElement>('[data-ts-input]');
+  const dtInput = $<HTMLInputElement>('[data-dt-input]');
+  const out = (name: string) => $<HTMLElement>(`[data-out="${name}"]`);
+
+  const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const supported = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+  const zones = [...new Set(['Asia/Tokyo', 'UTC', browserTz, ...supported])].filter(isTimeZone);
+  for (const z of zones) tzSelect.add(new Option(z === browserTz ? `${z}（このブラウザ）` : z, z));
+  const saved = readRaw(toolKey(SLUG, 'timeZone'));
+  tzSelect.value = typeof saved === 'string' && zones.includes(saved) ? saved : 'Asia/Tokyo';
+
+  function setMsg(sel: string, text: string) {
+    const el = $<HTMLElement>(sel);
+    el.textContent = text;
+    el.className = text ? 'msg msg-error' : 'msg';
+  }
+
+  function renderTimestamp() {
+    const names = ['unit', 'zoned', 'utc', 'iso', 'relative'];
+    if (tsInput.value.trim() === '') {
+      names.forEach((n) => (out(n).textContent = ''));
+      setMsg('[data-ts-msg]', '');
+      return;
+    }
+    const r = parseTimestamp(tsInput.value);
+    if (!r.ok) {
+      names.forEach((n) => (out(n).textContent = ''));
+      setMsg('[data-ts-msg]', describeError(r.error));
+      return;
+    }
+    setMsg('[data-ts-msg]', '');
+    const { ms, unit } = r.value;
+    out('unit').textContent = UNIT_LABELS[unit];
+    out('zoned').textContent = formatInZone(ms, tzSelect.value);
+    out('utc').textContent = formatInZone(ms, 'UTC');
+    out('iso').textContent = new Date(ms).toISOString();
+    out('relative').textContent = relativeTime(ms, Date.now());
+  }
+
+  function renderDateTime() {
+    const names = ['seconds', 'millis', 'dtUtc'];
+    const setCopy = (enabled: boolean) =>
+      root.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((b) => (b.disabled = !enabled));
+    if (dtInput.value.trim() === '') {
+      names.forEach((n) => (out(n).textContent = ''));
+      setMsg('[data-dt-msg]', '');
+      setCopy(false);
+      return;
+    }
+    const r = parseDateTime(dtInput.value, tzSelect.value);
+    if (!r.ok) {
+      names.forEach((n) => (out(n).textContent = ''));
+      setMsg('[data-dt-msg]', describeError(r.error));
+      setCopy(false);
+      return;
+    }
+    setMsg('[data-dt-msg]', '');
+    out('seconds').textContent = String(Math.floor(r.value / 1000));
+    out('millis').textContent = String(r.value);
+    out('dtUtc').textContent = formatInZone(r.value, 'UTC');
+    setCopy(true);
+  }
+
+  tsInput.addEventListener('input', renderTimestamp);
+  dtInput.addEventListener('input', renderDateTime);
+  tzSelect.addEventListener('change', () => {
+    write(toolKey(SLUG, 'timeZone'), tzSelect.value);
+    renderTimestamp();
+    renderDateTime();
+  });
+  $('[data-now]').addEventListener('click', () => {
+    const now = Date.now();
+    tsInput.value = String(Math.floor(now / 1000));
+    dtInput.value = formatInZone(now, tzSelect.value).replace(/ \(.*\)$/, '');
+    renderTimestamp();
+    renderDateTime();
+  });
+  root.querySelectorAll<HTMLButtonElement>('[data-copy]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const result = await copyText(out(btn.dataset.copy!).textContent ?? '');
+      setMsg('[data-dt-msg]', result === 'copied' ? '' : 'コピーできませんでした。値を選択してコピーしてください');
+      if (result === 'copied') {
+        const el = $<HTMLElement>('[data-dt-msg]');
+        el.textContent = 'コピーしました';
+        el.className = 'msg msg-info';
+      }
+    }),
+  );
+</script>
