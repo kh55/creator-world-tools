@@ -139,14 +139,18 @@ export function bindIOPanel(root: HTMLElement, options: IOPanelOptions): IOPanel
     void handleFile(fileInput.files?.[0]);
     fileInput.value = '';
   });
+  // ファイルのときだけ独自に読み込む。テキストのドラッグ&ドロップはブラウザ標準の動き（入力欄への挿入）に任せる
+  const hasFiles = (e: DragEvent) => e.dataTransfer?.types.includes('Files') ?? false;
   drop.addEventListener('dragover', (e) => {
+    if (!hasFiles(e)) return;
     e.preventDefault();
     drop.classList.add('dragging');
   });
   drop.addEventListener('dragleave', () => drop.classList.remove('dragging'));
   drop.addEventListener('drop', (e) => {
-    e.preventDefault();
     drop.classList.remove('dragging');
+    if (!hasFiles(e)) return;
+    e.preventDefault();
     void handleFile(e.dataTransfer?.files[0]);
   });
   copyBtn?.addEventListener('click', async () => {
