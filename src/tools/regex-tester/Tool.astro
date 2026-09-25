@@ -1,0 +1,225 @@
+---
+import { FLAG_OPTIONS } from './logic';
+
+const FLAG_LABELS: Record<(typeof FLAG_OPTIONS)[number], string> = {
+  i: 'i（大文字・小文字を区別しない）',
+  m: 'm（^ $ を各行に）',
+  s: 's（. が改行にもマッチ）',
+  u: 'u（Unicode）',
+};
+---
+
+<div class="io" data-regex>
+  <label class="field regex-pattern">
+    <strong>正規表現</strong>
+    <span class="regex-slash">/</span><input type="text" data-pattern spellcheck="false" autocomplete="off" placeholder="(?<year>\d{4})-(\d{2})" /><span class="regex-slash">/g</span>
+  </label>
+  <fieldset class="options">
+    <legend>フラグ</legend>
+    {
+      FLAG_OPTIONS.map((f) => (
+        <label class="field">
+          <input type="checkbox" data-flag={f} /> {FLAG_LABELS[f]}
+        </label>
+      ))
+    }
+  </fieldset>
+  <section>
+    <label for="regex-text"><strong>テスト文字列</strong></label>
+    <textarea id="regex-text" data-text spellcheck="false" autocomplete="off" placeholder="2026-09 と 2027-01"></textarea>
+  </section>
+  <fieldset class="options">
+    <legend>置換</legend>
+    <label class="field"><input type="checkbox" data-opt="replace" /> 置換結果も表示する</label>
+    <label class="field">
+      置換後の文字列
+      <input type="text" data-replacement spellcheck="false" autocomplete="off" placeholder="$2/$<year>" size="24" />
+    </label>
+  </fieldset>
+  <p class="msg" data-msg role="status" aria-live="polite"></p>
+  <section data-result hidden>
+    <h3>マッチ箇所</h3>
+    <pre class="regex-box" data-highlight></pre>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>位置</th><th>マッチした文字列</th><th>グループ</th></tr></thead>
+        <tbody data-matches></tbody>
+      </table>
+    </div>
+  </section>
+  <section data-replace-result hidden>
+    <h3>置換結果 <button type="button" class="btn" data-copy>コピー</button></h3>
+    <pre class="regex-box" data-replaced></pre>
+  </section>
+</div>
+
+<style>
+  .regex-pattern {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .regex-pattern input {
+    flex: 1;
+    min-width: 200px;
+    font-family: var(--mono);
+    font-size: 1rem;
+    padding: 6px 8px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: var(--surface);
+    color: var(--text);
+  }
+  .regex-slash {
+    font-family: var(--mono);
+    color: var(--muted);
+  }
+  .regex-box {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px;
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 50vh;
+    overflow: auto;
+  }
+  .regex-box :global(mark) {
+    background: #ffe58a;
+    color: #1d1d1f;
+    border-radius: 2px;
+  }
+  .regex-box :global(mark:nth-of-type(even)) {
+    background: #b8e1ff;
+  }
+</style>
+
+<script>
+  import { copyText } from '../../lib/file';
+  import { describeError, type Result } from '../../lib/result';
+  import { readBool, toolKey, write } from '../../lib/storage';
+  import { createRunner, type WorkerLike } from '../../lib/worker-runner';
+  import { FLAG_OPTIONS, type RegexRequest, type RegexResult } from './logic';
+
+  const SLUG = 'regex-tester';
+  const MAX_MATCHES = 1000;
+  const root = document.querySelector<HTMLElement>('[data-regex]')!;
+  const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+  const pattern = $<HTMLInputElement>('[data-pattern]');
+  const text = $<HTMLTextAreaElement>('[data-text]');
+  const replaceOn = $<HTMLInputElement>('[data-opt="replace"]');
+  const replacement = $<HTMLInputElement>('[data-replacement]');
+  const msg = $('[data-msg]');
+  const flagEls = FLAG_OPTIONS.map((f) => [f, $<HTMLInputElement>(`[data-flag="${f}"]`)] as const);
+
+  for (const [f, el] of flagEls) el.checked = readBool(toolKey(SLUG, `flag-${f}`), false);
+  replaceOn.checked = readBool(toolKey(SLUG, 'replace'), false);
+
+  const runner = createRunner<RegexRequest, Result<RegexResult>>(
+    // Worker の onmessage は this 付きの型のため、実行時に互換な WorkerLike として扱う
+    () => new Worker(new URL('./worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike,
+    1000,
+  );
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  function setMsg(t: string, isError = false) {
+    msg.textContent = t;
+    msg.className = isError ? 'msg msg-error' : 'msg msg-info';
+  }
+
+  function hideResults() {
+    $('[data-result]').hidden = true;
+    $('[data-replace-result]').hidden = true;
+  }
+
+  function render(result: RegexResult, source: string) {
+    const highlight = $<HTMLPreElement>('[data-highlight]');
+    highlight.replaceChildren();
+    let pos = 0;
+    for (const m of result.matches) {
+      if (m.index > pos) highlight.append(source.slice(pos, m.index));
+      const mark = document.createElement('mark');
+      mark.textContent = m.text || '​'; // 長さ 0 のマッチも位置が分かるようにする
+      highlight.append(mark);
+      pos = m.end;
+    }
+    highlight.append(source.slice(pos));
+
+    const body = $<HTMLTableSectionElement>('[data-matches]');
+    body.replaceChildren();
+    result.matches.forEach((m, i) => {
+      const tr = body.insertRow();
+      tr.insertCell().textContent = String(i + 1);
+      tr.insertCell().textContent = `${m.index}–${m.end}`;
+      tr.insertCell().textContent = m.text;
+      const named = Object.entries(m.named).map(([k, v]) => `${k}: ${v ?? '（なし）'}`);
+      const numbered = m.groups.map((g, j) => `$${j + 1}: ${g ?? '（なし）'}`);
+      tr.insertCell().textContent = [...numbered, ...named].join('\n');
+    });
+    $('[data-result]').hidden = result.total === 0;
+
+    const replaced = $('[data-replace-result]');
+    replaced.hidden = result.replaced === null;
+    $('[data-replaced]').textContent = result.replaced ?? '';
+
+    if (result.total === 0) setMsg('マッチしませんでした');
+    else if (result.truncated) setMsg(`${result.total} 件マッチ（先頭 ${result.matches.length} 件を表示）`);
+    else setMsg(`${result.total} 件マッチ`);
+  }
+
+  async function execute() {
+    clearTimeout(timer);
+    if (pattern.value === '') {
+      hideResults();
+      setMsg('');
+      return;
+    }
+    const source = text.value;
+    const request: RegexRequest = {
+      pattern: pattern.value,
+      flags: flagEls.filter(([, el]) => el.checked).map(([f]) => f).join(''),
+      text: source,
+      replacement: replaceOn.checked ? replacement.value : null,
+      maxMatches: MAX_MATCHES,
+    };
+    const outcome = await runner.run(request);
+    if (outcome.status === 'cancelled') return;
+    if (outcome.status === 'timeout') {
+      hideResults();
+      setMsg('処理に 1 秒以上かかったため中止しました。(a+)+ のように、繰り返しを入れ子にした正規表現になっていないか確認してください', true);
+      return;
+    }
+    if (!outcome.value.ok) {
+      hideResults();
+      setMsg(describeError(outcome.value.error), true);
+      return;
+    }
+    render(outcome.value.value, source);
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(() => void execute(), 250);
+  }
+
+  pattern.addEventListener('input', schedule);
+  text.addEventListener('input', schedule);
+  replacement.addEventListener('input', schedule);
+  for (const [f, el] of flagEls) {
+    el.addEventListener('change', () => {
+      write(toolKey(SLUG, `flag-${f}`), el.checked);
+      void execute();
+    });
+  }
+  replaceOn.addEventListener('change', () => {
+    write(toolKey(SLUG, 'replace'), replaceOn.checked);
+    void execute();
+  });
+  $('[data-copy]').addEventListener('click', async () => {
+    const r = await copyText($('[data-replaced]').textContent ?? '');
+    setMsg(r === 'copied' ? 'コピーしました' : 'コピーできませんでした。テキストを選択してコピーしてください');
+  });
+</script>
