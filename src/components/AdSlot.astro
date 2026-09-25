@@ -15,6 +15,7 @@ const enabled = Boolean(env.adsenseClient && adSlot);
       <span class="ad-label">広告</span>
       <ins
         class="adsbygoogle"
+        data-cwt-slot
         data-ad-client={env.adsenseClient}
         data-ad-slot={adSlot}
         data-ad-format="auto"
@@ -26,6 +27,7 @@ const enabled = Boolean(env.adsenseClient && adSlot);
 <script>
   import { pushAdSlots } from '../lib/ads';
 
-  // スクリプトはページ内で 1 度だけ実行されるので、まだ push していない広告枠をまとめて処理する
-  pushAdSlots(document.querySelectorAll('ins.adsbygoogle:not([data-cwt-pushed])'), window);
+  // スクリプトはページ内で 1 度だけ実行されるので、まだ push していない広告枠をまとめて処理する。
+  // 自動広告が差し込む <ins class="adsbygoogle"> は AdSense 自身が処理するので、自分で置いた枠だけを対象にする
+  pushAdSlots(document.querySelectorAll('ins[data-cwt-slot]:not([data-cwt-pushed])'), window);
 </script>
