@@ -147,16 +147,33 @@ import IOPanel from '../../components/IOPanel.astro';
       }
     },
     readFile(_file, bytes) {
-      const enc = direction.value === 'csv-to-json' ? (encoding.value as InputEncoding) : 'auto';
-      const decoded = decodeBytes(bytes, enc);
-      if (!decoded.ok) {
-        detected.textContent = '';
-        panel.setError(decoded.error.message);
-        return null;
-      }
-      detected.textContent = `読み込んだ文字コード: ${decoded.value.encoding === 'utf-8' ? 'UTF-8' : 'Shift_JIS'}`;
-      return decoded.value.text;
+      const text = decodeFile(bytes);
+      lastFile = { bytes, text };
+      return text;
     },
+  });
+
+  // 直前に読み込んだファイル（メモリ上だけに持ち、保存はしない）。文字コードを変えたときに読み直すのに使う
+  let lastFile: { bytes: Uint8Array; text: string | null } | null = null;
+
+  function decodeFile(bytes: Uint8Array): string | null {
+    const enc = direction.value === 'csv-to-json' ? (encoding.value as InputEncoding) : 'auto';
+    const decoded = decodeBytes(bytes, enc);
+    if (!decoded.ok) {
+      detected.textContent = '';
+      panel.setError(decoded.error.message);
+      return null;
+    }
+    detected.textContent = `読み込んだ文字コード: ${decoded.value.encoding === 'utf-8' ? 'UTF-8' : 'Shift_JIS'}`;
+    return decoded.value.text;
+  }
+
+  // 入力欄を手で書き換えたら、ファイルの読み直しはしない
+  panel.input.addEventListener('input', () => {
+    lastFile = null;
+  });
+  root.querySelector('[data-clear]')!.addEventListener('click', () => {
+    lastFile = null;
   });
 
   const persist = (el: HTMLSelectElement | HTMLInputElement, name: string) =>
@@ -169,5 +186,13 @@ import IOPanel from '../../components/IOPanel.astro';
   persist(delimiter, 'delimiter');
   persist(header, 'header');
   persist(encoding, 'encoding');
+  encoding.addEventListener('change', () => {
+    if (!lastFile || (lastFile.text !== null && panel.input.value !== lastFile.text)) return;
+    const text = decodeFile(lastFile.bytes);
+    lastFile.text = text;
+    if (text === null) return;
+    panel.input.value = text;
+    panel.rerun();
+  });
   persist(bom, 'bom');
 </script>

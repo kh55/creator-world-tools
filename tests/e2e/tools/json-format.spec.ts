@@ -48,6 +48,30 @@ test.describe('JSON 整形・検証', () => {
     await expect(page.locator('[data-output]')).toHaveValue('{\n  "x": true\n}');
   });
 
+  test('テキストのドラッグ&ドロップは妨げず、ファイルのドロップだけを読み込む', async ({ page }) => {
+    await page.goto('/tools/json-format/');
+    const result = await page.evaluate(() => {
+      const target = document.querySelector('[data-input]')!;
+      const fire = (type: string, dt: DataTransfer) => {
+        const ev = new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true });
+        target.dispatchEvent(ev);
+        return ev.defaultPrevented;
+      };
+      const text = new DataTransfer();
+      text.setData('text/plain', 'hello');
+      const file = new DataTransfer();
+      file.items.add(new File(['{"dropped":1}'], 'a.json', { type: 'application/json' }));
+      return {
+        textDragover: fire('dragover', text),
+        textDrop: fire('drop', text),
+        fileDragover: fire('dragover', file),
+        fileDrop: fire('drop', file),
+      };
+    });
+    expect(result).toEqual({ textDragover: false, textDrop: false, fileDragover: true, fileDrop: true });
+    await expect(page.locator('[data-input]')).toHaveValue('{"dropped":1}');
+  });
+
   test('入力データは localStorage に保存されない', async ({ page }) => {
     await page.goto('/tools/json-format/');
     await page.locator('[data-input]').fill('{"secret":"TOPSECRET"}');

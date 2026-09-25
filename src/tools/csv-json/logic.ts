@@ -54,6 +54,18 @@ export function cellText(v: unknown): string {
   return String(v);
 }
 
+// JS のオブジェクトは数字のキー（"2024" など）を先頭に並べ替えてしまうため、
+// JSON.stringify を使わずに列の順番どおりに書き出す（出力の形式は JSON.stringify(v, null, 2) と同じ）
+function objectsToJson(keys: string[], rows: string[][]): string {
+  if (rows.length === 0) return '[]';
+  const objects = rows.map((r) =>
+    keys.length === 0
+      ? '  {}'
+      : `  {\n${keys.map((k, i) => `    ${JSON.stringify(k)}: ${JSON.stringify(r[i])}`).join(',\n')}\n  }`,
+  );
+  return `[\n${objects.join(',\n')}\n]`;
+}
+
 export function csvToJson(
   csv: string,
   opts: { delimiter: Delimiter; header: boolean },
@@ -75,9 +87,8 @@ export function csvToJson(
   }
   const [head = [], ...body] = rows;
   const keys = uniqueKeys(head, width);
-  const objects = body.map((r) => Object.fromEntries(keys.map((k, i) => [k, r[i] ?? ''])));
   const padded = body.map((r) => keys.map((_, i) => r[i] ?? ''));
-  return ok({ json: JSON.stringify(objects, null, 2), table: tableOf(keys, padded) });
+  return ok({ json: objectsToJson(keys, padded), table: tableOf(keys, padded) });
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {

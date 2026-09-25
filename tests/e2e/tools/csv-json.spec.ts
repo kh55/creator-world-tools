@@ -26,6 +26,16 @@ test.describe('CSV ⇔ JSON 変換', () => {
     await expect(page.locator('[data-output]')).toHaveValue('[\n  {\n    "名前": "太郎",\n    "年齢": "20"\n  }\n]');
   });
 
+  test('ファイルを読み込んだ後に文字コードを変えると読み直す', async ({ page }) => {
+    await page.goto('/tools/csv-json/');
+    await page.locator('[data-opt="encoding"]').selectOption('utf-8');
+    await page.locator('[data-file]').setInputFiles({ name: 'excel.csv', mimeType: 'text/csv', buffer: SJIS_CSV });
+    await expect(page.locator('[data-msg]')).toContainText('Shift_JIS');
+    await page.locator('[data-opt="encoding"]').selectOption('shift_jis');
+    await expect(page.locator('[data-detected]')).toHaveText('読み込んだ文字コード: Shift_JIS');
+    await expect(page.locator('[data-output]')).toHaveValue('[\n  {\n    "名前": "太郎",\n    "年齢": "20"\n  }\n]');
+  });
+
   test('JSON を CSV にし、BOM 付きでダウンロードできる', async ({ page }) => {
     await page.goto('/tools/csv-json/');
     await page.locator('[data-opt="direction"]').selectOption('json-to-csv');

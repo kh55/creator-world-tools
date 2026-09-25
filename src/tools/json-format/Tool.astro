@@ -64,7 +64,7 @@ import IOPanel from '../../components/IOPanel.astro';
         data: [r.value.text],
       });
       if (r.value.precisionWarning) {
-        panel.setInfo('お使いのブラウザでは 16 桁以上の数値の精度が失われる場合があります');
+        panel.setInfo('お使いのブラウザでは一部の数値の表記が変わります（例: 1.0 → 1、16 桁以上の整数の精度落ち）');
       } else {
         panel.setInfo('✓ 正しい JSON です');
       }
