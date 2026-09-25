@@ -23,6 +23,19 @@ test.describe('UUID・パスワード生成', () => {
     await expect(page.locator('[data-opt="pwLength"]')).toHaveValue('32');
   });
 
+  test('UUID とパスワードをテキストファイルでダウンロードできる', async ({ page }) => {
+    await page.goto('/tools/uuid-password/');
+    for (const [btn, name, output] of [
+      ['[data-uuid-download]', 'uuids.txt', '[data-uuid-output]'],
+      ['[data-pw-download]', 'passwords.txt', '[data-pw-output]'],
+    ] as const) {
+      const [download] = await Promise.all([page.waitForEvent('download'), page.locator(btn).click()]);
+      expect(download.suggestedFilename()).toBe(name);
+      const body = Buffer.concat(await (await download.createReadStream()).toArray()).toString('utf8');
+      expect(body).toBe(`${await page.locator(output).inputValue()}\n`);
+    }
+  });
+
   test('文字種をすべて外すとエラーを表示する', async ({ page }) => {
     await page.goto('/tools/uuid-password/');
     for (const f of ['upper', 'lower', 'digits']) await page.locator(`[data-opt="${f}"]`).uncheck();

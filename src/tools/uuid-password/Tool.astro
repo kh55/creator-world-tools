@@ -15,7 +15,10 @@
       <button type="button" class="btn btn-primary" data-uuid-generate>生成</button>
     </fieldset>
     <textarea data-uuid-output readonly spellcheck="false" aria-label="生成した UUID"></textarea>
-    <div class="io-actions"><button type="button" class="btn" data-uuid-copy>コピー</button></div>
+    <div class="io-actions">
+      <button type="button" class="btn" data-uuid-copy>コピー</button>
+      <button type="button" class="btn" data-uuid-download>ダウンロード</button>
+    </div>
     <p class="msg" data-uuid-msg role="status" aria-live="polite"></p>
   </section>
 
@@ -33,13 +36,16 @@
       <button type="button" class="btn btn-primary" data-pw-generate>生成</button>
     </fieldset>
     <textarea data-pw-output readonly spellcheck="false" aria-label="生成したパスワード"></textarea>
-    <div class="io-actions"><button type="button" class="btn" data-pw-copy>コピー</button></div>
+    <div class="io-actions">
+      <button type="button" class="btn" data-pw-copy>コピー</button>
+      <button type="button" class="btn" data-pw-download>ダウンロード</button>
+    </div>
     <p class="msg" data-pw-msg role="status" aria-live="polite"></p>
   </section>
 </div>
 
 <script>
-  import { copyText } from '../../lib/file';
+  import { copyText, downloadBlob } from '../../lib/file';
   import { describeError } from '../../lib/result';
   import { readBool, readChoice, readInt, toolKey, write } from '../../lib/storage';
   import {
@@ -144,6 +150,13 @@
   }
   $('[data-uuid-copy]').addEventListener('click', () => copyFrom('[data-uuid-output]', '[data-uuid-msg]'));
   $('[data-pw-copy]').addEventListener('click', () => copyFrom('[data-pw-output]', '[data-pw-msg]'));
+
+  function downloadFrom(outputSel: string, filename: string) {
+    const value = $<HTMLTextAreaElement>(outputSel).value;
+    if (value) downloadBlob([`${value}\n`], filename, 'text/plain;charset=utf-8');
+  }
+  $('[data-uuid-download]').addEventListener('click', () => downloadFrom('[data-uuid-output]', 'uuids.txt'));
+  $('[data-pw-download]').addEventListener('click', () => downloadFrom('[data-pw-output]', 'passwords.txt'));
 
   generateUuid();
   generatePw();
