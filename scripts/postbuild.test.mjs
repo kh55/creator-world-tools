@@ -32,6 +32,21 @@ describe('buildCsp', () => {
   });
 });
 
+describe('buildCsp（GTM）', () => {
+  it('GTM を有効にすると https を広く許可する（GA4 などのタグを配信するため）', () => {
+    const csp = buildCsp({ PUBLIC_GTM_ID: 'GTM-ABC123' });
+    expect(directive(csp, 'connect-src')).toBe("connect-src 'self' https:");
+    expect(directive(csp, 'frame-src')).toBe('frame-src https:');
+    expect(directive(csp, 'img-src')).toContain('https:');
+    expect(directive(csp, 'script-src')).toContain('https:');
+  });
+
+  it('GTM と AdSense を両方有効にしても許可が重複しない', () => {
+    const csp = buildCsp({ PUBLIC_GTM_ID: 'GTM-ABC123', PUBLIC_ADSENSE_CLIENT: 'ca-pub-1' });
+    expect(directive(csp, 'connect-src')).toBe("connect-src 'self' https:");
+  });
+});
+
 describe('buildHeaders', () => {
   it('全パスにセキュリティヘッダーを付ける', () => {
     const h = buildHeaders({});

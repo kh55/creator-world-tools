@@ -3,6 +3,7 @@ interface ImportMetaEnv {
   readonly PUBLIC_ADSENSE_SLOT_TOOL?: string;
   readonly PUBLIC_ADSENSE_SLOT_FOOTER?: string;
   readonly PUBLIC_CF_ANALYTICS_TOKEN?: string;
+  readonly PUBLIC_GTM_ID?: string;
 }
 
 interface ImportMeta {
@@ -11,4 +12,5 @@ interface ImportMeta {
 
 interface Window {
   adsbygoogle?: unknown[];
+  dataLayer?: unknown[];
 }

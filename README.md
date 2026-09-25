@@ -48,7 +48,10 @@ E2E は広告・解析の環境変数を設定せずにビルドした `dist/` �
    ```
    tools  CNAME  creator-world-tools.pages.dev
    ```
-5. **アクセス解析（任意）**: Cloudflare ダッシュボード → Web Analytics → サイトを追加し、表示されたトークンを GitHub の Variables に `PUBLIC_CF_ANALYTICS_TOKEN` として登録する。
+5. **アクセス解析**:
+   - **GA4（Google タグマネージャー経由）**: GTM のコンテナ ID（`GTM-XXXXXXX`）を GitHub の Variables に `PUBLIC_GTM_ID` として登録する。GTM の管理画面で「Google タグ」（GA4 の測定 ID `G-XXXXXXXXXX`）を「Initialization - All Pages」トリガーで追加して公開する。同意モード v2 の初期値（EEA・英国・スイスは拒否、それ以外は許可）はサイト側で送っているので、GTM 側で同意の初期値タグを追加する必要はない。
+   - GTM では **「カスタム HTML」タグを使わない**（入力欄の内容を読めてしまうため）。GA4 の拡張計測の「フォーム操作」は、フォームの ID と名前だけを送り、入力値は送らない。
+   - **Cloudflare Web Analytics（任意）**: Cloudflare ダッシュボード → Web Analytics → サイトを追加し、表示されたトークンを GitHub の Variables に `PUBLIC_CF_ANALYTICS_TOKEN` として登録する。
 6. **ブランチを保護する**: Settings → Branches → `master` にルールを追加し、「Require a pull request before merging」と「Require status checks to pass」（`verify` を指定）をオンにする。
 7. **AdSense（ツールとページが揃ってから）**: AdSense に `tools.creator-world.net` で申請 → 承認後、GitHub の Variables に `PUBLIC_ADSENSE_CLIENT`（`ca-pub-...`）、`PUBLIC_ADSENSE_SLOT_TOOL`、`PUBLIC_ADSENSE_SLOT_FOOTER` を登録 → AdSense の「プライバシーとメッセージ」で EEA・英国・スイス向けの同意メッセージを有効にする（有効化の前に管理画面で料金が発生しないことを確認する）。
 
@@ -63,6 +66,6 @@ E2E は広告・解析の環境変数を設定せずにビルドした `dist/` �
 
 Pages Functions（サーバー側の処理）は使いません。使うと Workers の無料枠を消費します。
 
-## 広告を有効にしたときの CSP
+## 広告・GTM を有効にしたときの CSP
 
-広告・解析を使わないビルドでは、CSP で自サイト以外への通信をすべて禁止しています。AdSense を有効にすると多数の Google ドメインへの通信が必要になるため、`connect-src` などを `https:` に広げます（`scripts/postbuild.mjs`）。その場合も、入力データを送らないことはコードの静的チェックと E2E（広告なしビルドで外部通信ゼロ）で担保しています。
+広告・解析を使わないビルドでは、CSP で自サイト以外への通信をすべて禁止しています。AdSense または GTM（`PUBLIC_GTM_ID`）を有効にすると多数の Google ドメインへの通信が必要になるため、`connect-src` などを `https:` に広げます（`scripts/postbuild.mjs`）。その場合も、入力データを送らないことはコードの静的チェックと E2E（外部タグなしビルドで外部通信ゼロ）で担保しています。

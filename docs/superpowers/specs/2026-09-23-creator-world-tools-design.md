@@ -28,7 +28,7 @@
 | CI/CD | GitHub Actions + wrangler | デプロイ前にテストを必須化できる。公開リポジトリのため Actions は無料 |
 | 単体テスト | Vitest | Astro/Vite と設定を共有できる |
 | E2E | Playwright | 全ツールのスモークテストと外部通信の検知 |
-| 解析 | Cloudflare Web Analytics | 無料・Cookie 不使用で同意不要 |
+| 解析 | Google アナリティクス（GA4、Google タグマネージャー経由）と Cloudflare Web Analytics（任意） | GA4 は無料。Cookie を使うため同意モード v2 と AdSense の同意管理（CMP）で EEA 等の同意を取る |
 | 広告 | Google AdSense + AdSense「プライバシーとメッセージ」（Google 認定 CMP） | EEA/UK/スイス向けに認定 CMP が必須のため |
 
 ### 不採用とした選択肢
@@ -161,6 +161,7 @@ README に上記手順と、既存ツールをコピーして始めるテンプ�
 - `scripts/postbuild.mjs` が `dist/_headers` を生成し、次を設定する:
   - `Content-Security-Policy`（広告・解析なし）: `default-src 'self'`、`script-src 'self'`、`connect-src 'self'`、`frame-src 'none'`、`object-src 'none'`、`base-uri 'self'`、`frame-ancestors 'none'`。inline script は禁止（Astro のスクリプトのインライン化も無効にする）。
   - Cloudflare Web Analytics を有効にした場合は `static.cloudflareinsights.com`（script）と `cloudflareinsights.com`（connect）だけを追加する。
+  - GTM（`PUBLIC_GTM_ID`）を有効にした場合は、AdSense と同じく `https:` を広く許可する。GTM の読み込みは inline script ではなくバンドルされたスクリプトで行い、GTM より先に同意モード v2 の初期値（EEA・英国・スイスは拒否、それ以外は許可）を送る。GTM では「カスタム HTML」タグを使わない運用とする。
   - AdSense を有効にした場合は、国別ドメインを含む多数の Google ドメインから配信されドメインの列挙が保守できないため、`script-src` / `connect-src` / `img-src` / `frame-src` に `https:` を許可する。この場合も入力データを送らないことは、通信 API の静的チェック（`src` 配下で `fetch` 等の使用をテストで禁止）と、広告なしビルドでの E2E（外部通信ゼロ）で担保する。
   - `X-Content-Type-Options: nosniff`、`Referrer-Policy: strict-origin-when-cross-origin`、`Permissions-Policy`（カメラ・マイク・位置情報を無効化）。
 - E2E テストで、各ツールの変換操作中にサイト自身のオリジン以外へのリクエストが発生しないことを検証する（広告・解析は E2E 実行時は無効）。
@@ -268,6 +269,5 @@ Shift_JIS のエンコード（バイト数計算）はブラウザ標準で行�
 - 入力データを localStorage に保存する機能
 - 多言語対応（日本語のみ）
 - ダークモード以外のテーマ切り替え（ダークモードは `prefers-color-scheme` に従う）
-- GA4 などの Cookie を使うアクセス解析
 - PWA / オフライン対応
 - お問い合わせページ（連絡先の掲載は行わない）
