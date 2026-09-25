@@ -1,0 +1,167 @@
+<div class="io" data-diff>
+  <div class="diff-inputs">
+    {
+      (['left', 'right'] as const).map((side) => (
+        <section>
+          <label for={`diff-${side}`}>
+            <strong>{side === 'left' ? '変更前' : '変更後'}</strong>
+          </label>
+          <textarea id={`diff-${side}`} data-side={side} spellcheck="false" autocomplete="off" />
+          <div class="io-actions">
+            <label class="btn">
+              ファイルを選択
+              <input type="file" data-file={side} accept=".txt,.md,.csv,.json,.yaml,.yml,.html,.css,.js,.ts,text/*" class="visually-hidden" />
+            </label>
+          </div>
+        </section>
+      ))
+    }
+  </div>
+  <fieldset class="options">
+    <legend>オプション</legend>
+    <label class="field">
+      比較の単位
+      <select data-opt="mode">
+        <option value="line">行</option>
+        <option value="word">単語</option>
+        <option value="char">文字</option>
+      </select>
+    </label>
+    <label class="field"><input type="checkbox" data-opt="ignoreWhitespace" /> 空白の違いを無視</label>
+    <label class="field"><input type="checkbox" data-opt="ignoreCase" /> 大文字・小文字を無視</label>
+    <button type="button" class="btn" data-swap>左右を入れ替え</button>
+  </fieldset>
+  <p class="msg" data-msg role="status" aria-live="polite"></p>
+  <pre class="diff-output" data-output aria-label="差分" hidden></pre>
+</div>
+
+<style>
+  .diff-inputs {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 12px;
+  }
+  .diff-output {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 10px;
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 70vh;
+    overflow: auto;
+  }
+  .diff-output :global(ins) {
+    background: #d7f5dd;
+    color: #0b5a1f;
+    text-decoration: none;
+  }
+  .diff-output :global(del) {
+    background: #fcdada;
+    color: #8c1c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    .diff-output :global(ins) {
+      background: #16402a;
+      color: #a8efbe;
+    }
+    .diff-output :global(del) {
+      background: #4a1f1f;
+      color: #ffb4b4;
+    }
+  }
+</style>
+
+<script>
+  import { decodeBytes } from '../../lib/encoding';
+  import { checkFileSize, readFileBytes } from '../../lib/file';
+  import { describeError } from '../../lib/result';
+  import { readBool, readChoice, toolKey, write } from '../../lib/storage';
+  import { compareTexts, MODES, type Mode } from './logic';
+
+  const SLUG = 'text-diff';
+  const root = document.querySelector<HTMLElement>('[data-diff]')!;
+  const $ = <T extends HTMLElement>(sel: string) => root.querySelector<T>(sel)!;
+  const left = $<HTMLTextAreaElement>('[data-side="left"]');
+  const right = $<HTMLTextAreaElement>('[data-side="right"]');
+  const mode = $<HTMLSelectElement>('[data-opt="mode"]');
+  const ignoreWhitespace = $<HTMLInputElement>('[data-opt="ignoreWhitespace"]');
+  const ignoreCase = $<HTMLInputElement>('[data-opt="ignoreCase"]');
+  const msg = $('[data-msg]');
+  const output = $<HTMLPreElement>('[data-output]');
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  mode.value = readChoice(toolKey(SLUG, 'mode'), MODES, 'line');
+  ignoreWhitespace.checked = readBool(toolKey(SLUG, 'ignoreWhitespace'), false);
+  ignoreCase.checked = readBool(toolKey(SLUG, 'ignoreCase'), false);
+
+  function setMsg(text: string, isError = false) {
+    msg.textContent = text;
+    msg.className = isError ? 'msg msg-error' : 'msg msg-info';
+  }
+
+  function compare() {
+    clearTimeout(timer);
+    output.replaceChildren();
+    if (left.value === '' && right.value === '') {
+      output.hidden = true;
+      setMsg('');
+      return;
+    }
+    const r = compareTexts(left.value, right.value, {
+      mode: mode.value as Mode,
+      ignoreWhitespace: ignoreWhitespace.checked,
+      ignoreCase: ignoreCase.checked,
+    });
+    if (!r.ok) {
+      output.hidden = true;
+      setMsg(describeError(r.error), true);
+      return;
+    }
+    const { parts, added, removed, identical } = r.value;
+    const unit = mode.value === 'line' ? '行' : mode.value === 'word' ? '語' : '文字';
+    setMsg(identical ? '✓ 違いはありません' : `+${added} ${unit} 追加 / −${removed} ${unit} 削除`);
+    for (const p of parts) {
+      const el = p.type === 'added' ? document.createElement('ins') : p.type === 'removed' ? document.createElement('del') : document.createElement('span');
+      el.textContent = p.value;
+      output.append(el);
+    }
+    output.hidden = false;
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    timer = setTimeout(compare, 300);
+  }
+
+  async function loadFile(side: HTMLTextAreaElement, file: File | undefined) {
+    if (!file) return;
+    const size = checkFileSize(file.size);
+    if (!size.ok) return setMsg(size.error.message, true);
+    const decoded = decodeBytes(await readFileBytes(file), 'auto');
+    if (!decoded.ok) return setMsg(decoded.error.message, true);
+    side.value = decoded.value.text;
+    compare();
+  }
+
+  left.addEventListener('input', schedule);
+  right.addEventListener('input', schedule);
+  root.querySelectorAll<HTMLInputElement>('[data-file]').forEach((input) =>
+    input.addEventListener('change', () => {
+      void loadFile(input.dataset.file === 'left' ? left : right, input.files?.[0]);
+      input.value = '';
+    }),
+  );
+  for (const [el, name] of [[mode, 'mode'], [ignoreWhitespace, 'ignoreWhitespace'], [ignoreCase, 'ignoreCase']] as const) {
+    el.addEventListener('change', () => {
+      write(toolKey(SLUG, name), el instanceof HTMLInputElement ? el.checked : el.value);
+      compare();
+    });
+  }
+  $('[data-swap]').addEventListener('click', () => {
+    [left.value, right.value] = [right.value, left.value];
+    compare();
+  });
+</script>
