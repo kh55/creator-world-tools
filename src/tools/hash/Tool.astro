@@ -1,0 +1,131 @@
+---
+import IOPanel from '../../components/IOPanel.astro';
+import { ALGORITHMS } from './logic';
+---
+
+<IOPanel id="hash" inputLabel="テキストを入力（ファイルも可）" placeholder="ハッシュ値を計算したいテキスト" runLabel="計算" showOutput={false}>
+  <fieldset slot="options" class="options">
+    <legend>オプション</legend>
+    <label class="field"><input type="checkbox" data-opt="upper" /> 大文字で表示</label>
+  </fieldset>
+  <div slot="after">
+    <div class="table-wrap">
+      <table data-hash-table>
+        <thead><tr><th>アルゴリズム</th><th>ハッシュ値</th><th></th></tr></thead>
+        <tbody>
+          {
+            ALGORITHMS.map((a) => (
+              <tr data-row={a}>
+                <th scope="row">{a}</th>
+                <td data-hash={a} class="hash-value" />
+                <td>
+                  <button type="button" class="btn" data-copy-hash={a} disabled>
+                    コピー
+                  </button>
+                </td>
+              </tr>
+            ))
+          }
+        </tbody>
+      </table>
+    </div>
+    <p>
+      <label class="field">
+        期待値と照合
+        <input type="text" data-expected placeholder="配布元が公開しているハッシュ値を貼り付け" spellcheck="false" autocomplete="off" size="50" />
+      </label>
+    </p>
+    <p class="msg" data-match role="status" aria-live="polite"></p>
+  </div>
+</IOPanel>
+
+<style>
+  .hash-value {
+    font-family: var(--mono);
+    word-break: break-all;
+    white-space: normal;
+  }
+  [data-row].matched th,
+  [data-row].matched td {
+    background: var(--info-bg);
+  }
+</style>
+
+<script>
+  import { copyText, formatBytes } from '../../lib/file';
+  import { bindIOPanel } from '../../lib/io-panel';
+  import { readBool, toolKey, write } from '../../lib/storage';
+  import { ALGORITHMS, findMatch, hashBytes, hashText, type Hashes } from './logic';
+
+  const SLUG = 'hash';
+  const root = document.querySelector<HTMLElement>(`[data-io="${SLUG}"]`)!;
+  const upper = root.querySelector<HTMLInputElement>('[data-opt="upper"]')!;
+  const expected = root.querySelector<HTMLInputElement>('[data-expected]')!;
+  const match = root.querySelector<HTMLElement>('[data-match]')!;
+  let current: Hashes | null = null;
+  let seq = 0; // 古い計算結果で上書きしないための番号
+
+  upper.checked = readBool(toolKey(SLUG, 'upper'), false);
+
+  function render() {
+    for (const a of ALGORITHMS) {
+      const value = current?.[a] ?? '';
+      root.querySelector<HTMLElement>(`[data-hash="${a}"]`)!.textContent = upper.checked ? value.toUpperCase() : value;
+      root.querySelector<HTMLButtonElement>(`[data-copy-hash="${a}"]`)!.disabled = !current;
+    }
+    const found = current ? findMatch(current, expected.value) : undefined;
+    for (const a of ALGORITHMS) root.querySelector(`[data-row="${a}"]`)!.classList.toggle('matched', found === a);
+    if (found === undefined) {
+      match.textContent = '';
+      match.className = 'msg';
+    } else if (found === null) {
+      match.textContent = '✗ どのハッシュ値とも一致しません';
+      match.className = 'msg msg-error';
+    } else {
+      match.textContent = `✓ ${found} と一致しました`;
+      match.className = 'msg msg-info';
+    }
+  }
+
+  async function show(compute: Promise<Hashes>, note = '') {
+    const mine = ++seq;
+    const hashes = await compute;
+    if (mine !== seq) return;
+    current = hashes;
+    render();
+    if (note) panel.setInfo(note);
+  }
+
+  const panel = bindIOPanel(root, {
+    runOnEmpty: true,
+    run(text) {
+      panel.clearMessages();
+      if (text === '') {
+        seq++;
+        current = null;
+        render();
+        return;
+      }
+      void show(hashText(text));
+    },
+    readFile(file, bytes) {
+      // ファイルはテキストに変換せず、中身のバイト列そのものを計算する
+      panel.input.value = '';
+      void show(hashBytes(bytes), `${file.name}（${formatBytes(bytes.length)}）のハッシュ値です`);
+      return null;
+    },
+  });
+
+  upper.addEventListener('change', () => {
+    write(toolKey(SLUG, 'upper'), upper.checked);
+    render();
+  });
+  expected.addEventListener('input', render);
+  root.querySelectorAll<HTMLButtonElement>('[data-copy-hash]').forEach((btn) =>
+    btn.addEventListener('click', async () => {
+      const cell = root.querySelector<HTMLElement>(`[data-hash="${btn.dataset.copyHash}"]`)!;
+      const result = await copyText(cell.textContent ?? '');
+      panel.setInfo(result === 'copied' ? `${btn.dataset.copyHash} をコピーしました` : 'コピーできませんでした。値を選択してコピーしてください');
+    }),
+  );
+</script>
